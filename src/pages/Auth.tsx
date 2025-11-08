@@ -1,3 +1,4 @@
+// src/pages/Auth.tsx
 import { useState } from "react";
 import { useAuth, UserRole } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, Users, Wrench, Building2, Shield } from "lucide-react";
 
 export default function Auth() {
@@ -14,33 +14,21 @@ export default function Auth() {
   const [role, setRole] = useState<UserRole>("student");
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
-  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password || !role) {
-      toast({
-        title: "Error",
-        description: "Por favor complete todos los campos",
-        variant: "destructive",
-      });
       return;
     }
 
     setIsLoading(true);
+    console.log("ROL SELECCIONADO:", role);
     try {
       await login(email, password, role);
-      toast({
-        title: "Bienvenido",
-        description: "Sesión iniciada correctamente",
-      });
+      
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo iniciar sesión",
-        variant: "destructive",
-      });
+      // Solo errores críticos
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +88,7 @@ export default function Auth() {
               <Input
                 id="email"
                 type="email"
-                placeholder="usuario@estudiantec.cr"
+                placeholder="juan.perez@estudiantec.cr"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -124,12 +112,14 @@ export default function Auth() {
               className="w-full"
               disabled={isLoading}
             >
-              {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+              {isLoading ? "Verificando..." : "Iniciar Sesión"}
             </Button>
 
             <div className="text-center text-sm text-muted-foreground">
-              <p>Demo: Use cualquier correo y contraseña</p>
-              <p className="text-xs mt-1">Seleccione el rol que desea simular</p>
+              <p className="font-medium">Usuarios de prueba:</p>
+              <p className="text-xs">juan.perez@estudiantec.cr → 123456 → Estudiante</p>
+              <p className="text-xs">carlos.rodriguez@itcr.ac.cr → 123456 → Técnico</p>
+              <p className="text-xs">ana.jimenez@tec.ac.cr → 123456 → Admin</p>
             </div>
           </form>
         </CardContent>
