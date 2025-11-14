@@ -9,12 +9,9 @@ import { useApprovedRequests } from "@/hooks/useApprovedRequests";
 import RequestCard from "@/components/RequestCard";
 import { toast } from "@/components/ui/sonner";
 import InventoryList from "@/components/inventory/InventoryList";
+import MaintenanceList from "@/components/maintenance/MaintenanceList";
 
-// Datos mock para mantenimiento y reportes de momento
-
-const mockMaintenance = [
-  { equipment: "Generador GF-001", type: "Preventivo", status: "Programado", date: "2025-11-20" },
-];
+// Datos mock para reportes de momento
 
 export default function TechnicianDashboard() {
   const { data: requests, isLoading, error } = useApprovedRequests();
@@ -98,26 +95,17 @@ export default function TechnicianDashboard() {
           </Card>
         </TabsContent>
 
-        {/* === PESTAÑA: MANTENIMIENTO (mock) === */}
+        {/* === PESTAÑA: MANTENIMIENTO === */}
         <TabsContent value="maintenance">
           <Card>
             <CardHeader>
-              <CardTitle>Mantenimientos Programados</CardTitle>
+              <CardTitle>Gestión de Mantenimientos</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Programar, registrar y dar seguimiento a intervenciones
+              </p>
             </CardHeader>
             <CardContent>
-              {mockMaintenance.map((m, i) => (
-                <div key={i} className="p-4 border rounded-lg mb-3">
-                  <div className="flex justify-between">
-                    <h4 className="font-medium">{m.equipment}</h4>
-                    <Badge variant={m.status === "Programado" ? "secondary" : "default"}>
-                      {m.status}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {m.type} • {m.date}
-                  </p>
-                </div>
-              ))}
+              <MaintenanceList />
             </CardContent>
           </Card>
         </TabsContent>
