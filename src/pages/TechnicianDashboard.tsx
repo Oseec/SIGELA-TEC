@@ -8,12 +8,9 @@ import { ClipboardList, Package, Wrench, FileText } from "lucide-react";
 import { useApprovedRequests } from "@/hooks/useApprovedRequests";
 import RequestCard from "@/components/RequestCard";
 import { toast } from "@/components/ui/sonner";
+import InventoryList from "@/components/inventory/InventoryList";
 
-// Datos mock para inventario, mantenimiento y reportes (mientras implementas 2.2, 2.3, 2.4)
-const mockInventory = [
-  { name: "Osciloscopios", total: 5, available: 3, reserved: 1, maintenance: 1 },
-  { name: "Resistencias", total: 500, available: 45, reserved: 0, maintenance: 0, alert: true },
-];
+// Datos mock para mantenimiento y reportes de momento
 
 const mockMaintenance = [
   { equipment: "Generador GF-001", type: "Preventivo", status: "Programado", date: "2025-11-20" },
@@ -86,37 +83,17 @@ export default function TechnicianDashboard() {
           </Card>
         </TabsContent>
 
-        {/* === PESTAÑA: INVENTARIO (mock por ahora) === */}
+        {/* === PESTAÑA: INVENTARIO === */}
         <TabsContent value="inventory">
           <Card>
             <CardHeader>
               <CardTitle>Inventario</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Alta, baja, edición, stock y alertas
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {mockInventory.map((item, i) => (
-                  <Card key={i} className={item.alert ? "border-warning" : ""}>
-                    <CardHeader>
-                      <CardTitle className="text-base">{item.name}</CardTitle>
-                      {item.alert && (
-                        <Badge variant="destructive">Stock Bajo</Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-sm space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Total:</span>
-                          <span>{item.total}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Disponible:</span>
-                          <span className="text-success">{item.available}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <InventoryList />
             </CardContent>
           </Card>
         </TabsContent>
