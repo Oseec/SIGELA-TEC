@@ -4,92 +4,86 @@ import { Badge } from "@/components/ui/badge";
 import {
   Beaker,
   Calendar,
-  Package,
+  Settings,
+  UserPlus,
   Wrench,
   TrendingUp,
   AlertCircle,
   CheckCircle,
   Clock,
   ArrowRight,
+  XCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useDashboard } from "@/hooks/useDashboard";
 
-const stats = [
-  {
-    title: "Laboratorios Activos",
-    value: "24",
-    change: "+2 este mes",
-    icon: Beaker,
-    color: "text-primary",
-  },
-  {
-    title: "Reservas Activas",
-    value: "156",
-    change: "+18% vs mes anterior",
-    icon: Calendar,
-    color: "text-secondary",
-  },
-  {
-    title: "Equipos Disponibles",
-    value: "342",
-    change: "89% disponibilidad",
-    icon: Package,
-    color: "text-accent",
-  },
-  {
-    title: "Mantenimientos",
-    value: "8",
-    change: "5 pendientes",
-    icon: Wrench,
-    color: "text-warning",
-  },
-];
+const getBadgeVariant = (estado: string) => {
+  switch (estado) {
+    case "aprobada":
+      return "default"; // verde
+    case "pendiente":
+    case "en_revision":
+      return "secondary"; // gris
+    case "rechazada":
+      return "destructive"; // rojo
+    case "cancelada":
+      return "outline"; // neutro
+    default:
+      return "secondary";
+  }
+};
 
-const recentReservations = [
-  {
-    id: 1,
-    lab: "Laboratorio de Física",
-    user: "María González",
-    date: "2025-11-05",
-    time: "10:00 - 12:00",
-    status: "approved",
-  },
-  {
-    id: 2,
-    lab: "Laboratorio de Química",
-    user: "Carlos Ramírez",
-    date: "2025-11-05",
-    time: "14:00 - 16:00",
-    status: "pending",
-  },
-  {
-    id: 3,
-    lab: "Laboratorio de Computación",
-    user: "Ana Martínez",
-    date: "2025-11-06",
-    time: "09:00 - 11:00",
-    status: "approved",
-  },
-];
+const getBadgeContent = (estado: string) => {
+  switch (estado) {
+    case "aprobada":
+      return (
+        <>
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Aprobada
+        </>
+      );
 
-const upcomingMaintenance = [
-  {
-    id: 1,
-    equipment: "Microscopio Digital HD-2000",
-    lab: "Lab. Biología",
-    date: "2025-11-08",
-    type: "Preventivo",
-  },
-  {
-    id: 2,
-    equipment: "Espectrómetro UV-Vis",
-    lab: "Lab. Química",
-    date: "2025-11-10",
-    type: "Correctivo",
-  },
-];
+    case "pendiente":
+      return (
+        <>
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Pendiente
+        </>
+      );
+
+    case "en_revision":
+      return (
+        <>
+          <Clock className="h-3 w-3 mr-1" />
+          En revisión
+        </>
+      );
+
+    case "rechazada":
+      return (
+        <>
+          <XCircle className="h-3 w-3 mr-1" />
+          Rechazada
+        </>
+      );
+
+    case "cancelada":
+      return (
+        <>
+          <XCircle className="h-3 w-3 mr-1" />
+          Cancelada
+        </>
+      );
+
+    default:
+      return estado;
+  }
+};
 
 export default function Dashboard() {
+
+  const { stats, recentReservations, upcomingMaintenance } = useDashboard();
+
   return (
     <div className="p-6 space-y-6">
       {/* Welcome Section */}
@@ -100,7 +94,7 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {stats.data?.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
@@ -126,7 +120,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentReservations.map((reservation) => (
+              {recentReservations.data?.map((reservation) => (
                 <div
                   key={reservation.id}
                   className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
@@ -136,24 +130,11 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">{reservation.user}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
-                      {reservation.date} • {reservation.time}
+                      {reservation.fecha} • {reservation.horaInicio} - {reservation.horaFin}
                     </div>
                   </div>
-                  <Badge
-                    variant={reservation.status === "approved" ? "default" : "secondary"}
-                    className="shrink-0"
-                  >
-                    {reservation.status === "approved" ? (
-                      <>
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Aprobada
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Pendiente
-                      </>
-                    )}
+                  <Badge variant={getBadgeVariant(reservation.estado)} className="shrink-0">
+                    {getBadgeContent(reservation.estado)}
                   </Badge>
                 </div>
               ))}
@@ -178,7 +159,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {upcomingMaintenance.map((maintenance) => (
+              {upcomingMaintenance.data?.map((maintenance) => (
                 <div
                   key={maintenance.id}
                   className="flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
@@ -216,11 +197,11 @@ export default function Dashboard() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Button variant="outline" className="h-auto flex-col items-start p-4 gap-2" asChild>
-              <Link to="/reservations">
-                <Calendar className="h-6 w-6 text-primary" />
+              <Link to="/users">
+                <UserPlus className="h-6 w-6 text-primary" />
                 <div className="text-left">
-                  <p className="font-semibold">Nueva Reserva</p>
-                  <p className="text-xs text-muted-foreground">Reservar laboratorio</p>
+                  <p className="font-semibold">Nuevo Usuario</p>
+                  <p className="text-xs text-muted-foreground">Gestionar cuentas</p>
                 </div>
               </Link>
             </Button>
@@ -234,11 +215,11 @@ export default function Dashboard() {
               </Link>
             </Button>
             <Button variant="outline" className="h-auto flex-col items-start p-4 gap-2" asChild>
-              <Link to="/inventory">
-                <Package className="h-6 w-6 text-accent" />
+              <Link to="/settings">
+                <Settings className="h-6 w-6 text-accent" />
                 <div className="text-left">
-                  <p className="font-semibold">Inventario</p>
-                  <p className="text-xs text-muted-foreground">Consultar equipos</p>
+                  <p className="font-semibold">Configuración</p>
+                  <p className="text-xs text-muted-foreground">Parámetros del sistema</p>
                 </div>
               </Link>
             </Button>

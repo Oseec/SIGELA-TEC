@@ -2,74 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Clock, MapPin, User, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Calendar, Clock, MapPin, User, CheckCircle, XCircle, AlertCircle, Link } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-const reservations = {
-  pending: [
-    {
-      id: 1,
-      lab: "Laboratorio de Física Avanzada",
-      code: "LAB-FIS-001",
-      date: "2025-11-08",
-      time: "10:00 - 12:00",
-      purpose: "Práctica de oscilaciones y ondas",
-      equipment: ["Osciloscopio", "Generador de señales"],
-      requestDate: "2025-11-03",
-    },
-  ],
-  approved: [
-    {
-      id: 2,
-      lab: "Laboratorio de Computación",
-      code: "LAB-COM-005",
-      date: "2025-11-05",
-      time: "14:00 - 16:00",
-      purpose: "Desarrollo de proyecto de bases de datos",
-      equipment: ["Computadora", "Acceso a servidor"],
-      approvedBy: "Dr. Carlos Mora",
-      requestDate: "2025-11-01",
-    },
-    {
-      id: 3,
-      lab: "Laboratorio de Química Orgánica",
-      code: "LAB-QUI-003",
-      date: "2025-11-06",
-      time: "09:00 - 11:00",
-      purpose: "Síntesis de compuestos orgánicos",
-      equipment: ["Campana extractora", "Balanza analítica"],
-      approvedBy: "Dra. María Fernández",
-      requestDate: "2025-10-30",
-    },
-  ],
-  completed: [
-    {
-      id: 4,
-      lab: "Laboratorio de Electrónica",
-      code: "LAB-ELE-002",
-      date: "2025-10-30",
-      time: "15:00 - 17:00",
-      purpose: "Ensamblaje de circuitos digitales",
-      equipment: ["Estación de soldadura", "Multímetro"],
-      completedDate: "2025-10-30",
-    },
-  ],
-  rejected: [
-    {
-      id: 5,
-      lab: "Laboratorio de Materiales",
-      code: "LAB-MAT-001",
-      date: "2025-11-04",
-      time: "11:00 - 13:00",
-      purpose: "Ensayos de tracción",
-      equipment: ["Máquina de ensayos universal"],
-      rejectionReason: "Mantenimiento programado en el horario solicitado",
-      rejectedBy: "Ing. Roberto Solís",
-      requestDate: "2025-11-02",
-    },
-  ],
-};
+import { useReservations } from "@/hooks/useReservations";
 
-const ReservationCard = ({ reservation, status }: { reservation: any; status: string }) => {
+const ReservationCard = ({ reservation, status, cancelReservation }: { reservation: any; status: string; cancelReservation: any }) => {
+
+  const navigate = useNavigate();
+
   const getStatusBadge = () => {
     switch (status) {
       case "pending":
@@ -86,11 +27,18 @@ const ReservationCard = ({ reservation, status }: { reservation: any; status: st
             Aprobada
           </Badge>
         );
-      case "completed":
+      case "onReview":
         return (
           <Badge variant="outline">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Completada
+            <AlertCircle className="h-3 w-3 mr-1" />
+            En Revisión
+          </Badge>
+        );
+      case "canceled":
+        return (
+          <Badge variant="outline">
+            <XCircle className="h-3 w-3 mr-1" />
+            Cancelada
           </Badge>
         );
       case "rejected":
@@ -168,22 +116,26 @@ const ReservationCard = ({ reservation, status }: { reservation: any; status: st
         )}
 
         <div className="pt-2 flex gap-2">
+          {/* Ver detalles → SIEMPRE aparece */}
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => navigate(`/reservations/${reservation.id}`)}
+          >
+            Ver detalles
+          </Button>
+
+          {/* Cancelar → SOLO para pendientes */}
           {status === "pending" && (
-            <>
-              <Button variant="outline" className="flex-1">
-                Modificar
-              </Button>
-              <Button variant="destructive">Cancelar</Button>
-            </>
-          )}
-          {status === "approved" && (
-            <Button variant="outline" className="flex-1">
-              Ver detalles
-            </Button>
-          )}
-          {(status === "completed" || status === "rejected") && (
-            <Button variant="outline" className="flex-1">
-              Ver detalles
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const ok = confirm("¿Seguro que desea cancelar esta reserva?");
+                if (!ok) return;
+                cancelReservation?.mutate(reservation.id);
+              }}
+            >
+              Cancelar
             </Button>
           )}
         </div>
@@ -193,6 +145,12 @@ const ReservationCard = ({ reservation, status }: { reservation: any; status: st
 };
 
 export default function Reservations() {
+
+  const { data: reservations, isLoading, cancelReservation } = useReservations();
+
+  if (isLoading) return <p>Cargando...</p>;
+  if (!reservations) return <p>No hay reservas.</p>;
+  
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -200,21 +158,23 @@ export default function Reservations() {
           <h1 className="text-3xl font-bold mb-2">Mis Reservas</h1>
           <p className="text-muted-foreground">Administra tus solicitudes de laboratorio</p>
         </div>
-        <Button size="lg">Nueva Reserva</Button>
       </div>
 
       <Tabs defaultValue="pending" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="pending">
+        <TabsList className="flex gap-2 w-full overflow-x-auto whitespace-nowrap lg:w-auto lg:inline-flex">
+          <TabsTrigger value="pending" className="whitespace-nowrap">
             Pendientes ({reservations.pending.length})
           </TabsTrigger>
-          <TabsTrigger value="approved">
+          <TabsTrigger value="approved" className="whitespace-nowrap">
             Aprobadas ({reservations.approved.length})
           </TabsTrigger>
-          <TabsTrigger value="completed">
-            Completadas ({reservations.completed.length})
+          <TabsTrigger value="onReview" className="whitespace-nowrap">
+            En Revisión ({reservations.inReview.length})
           </TabsTrigger>
-          <TabsTrigger value="rejected">
+          <TabsTrigger value="canceled" className="whitespace-nowrap">
+            Canceladas ({reservations.canceled.length})
+          </TabsTrigger>
+          <TabsTrigger value="rejected" className="whitespace-nowrap">
             Rechazadas ({reservations.rejected.length})
           </TabsTrigger>
         </TabsList>
@@ -222,7 +182,12 @@ export default function Reservations() {
         <TabsContent value="pending" className="space-y-4">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {reservations.pending.map((reservation) => (
-              <ReservationCard key={reservation.id} reservation={reservation} status="pending" />
+              <ReservationCard
+                key={reservation.id}
+                reservation={reservation}
+                status="pending"
+                cancelReservation={cancelReservation}
+              />
             ))}
           </div>
         </TabsContent>
@@ -235,10 +200,18 @@ export default function Reservations() {
           </div>
         </TabsContent>
 
-        <TabsContent value="completed" className="space-y-4">
+        <TabsContent value="onReview" className="space-y-4">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {reservations.completed.map((reservation) => (
-              <ReservationCard key={reservation.id} reservation={reservation} status="completed" />
+            {reservations.inReview.map((reservation) => (
+              <ReservationCard key={reservation.id} reservation={reservation} status="onReview" />
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="canceled" className="space-y-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {reservations.canceled.map((reservation) => (
+              <ReservationCard key={reservation.id} reservation={reservation} status="canceled" />
             ))}
           </div>
         </TabsContent>

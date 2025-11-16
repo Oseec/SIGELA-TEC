@@ -11,6 +11,8 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Laboratories from "./pages/Laboratories";
 import Reservations from "./pages/Reservations";
+import ReservationDetail from "./pages/ReservationDetail";
+import Maintenance from "@/pages/Maintenance";
 import StudentDashboard from "./pages/StudentDashboard";
 import TechnicianDashboard from "./pages/TechnicianDashboard";
 import Users from "./pages/Users";
@@ -41,6 +43,9 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/laboratories" element={<Laboratories />} />
               <Route path="/reservations" element={<Reservations />} />
+              <Route path="/reservations/:id" element={<ReservationDetail />} />
+              <Route path="/maintenance" element={<Maintenance />} />
+
               <Route path="/users" element={<Users />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/audit" element={<Audit />} />
