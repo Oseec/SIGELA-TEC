@@ -67,20 +67,19 @@ export default function ProfileModal({
   isOpen,
   onClose,
 }: ProfileModalProps) {
-  const { user } = useAuth(); // aquí debes tener user.id, user.email, user.role, user.name
+  const { user, refreshUser } = useAuth(); 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [certificaciones, setCertificaciones] = useState<Certificacion[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Cargar datos reales cuando se abre el modal
+
   useEffect(() => {
     if (!isOpen || !user) return;
 
     const cargarDatos = async () => {
       setLoading(true);
 
-      // 1. Perfil
       const { data: perfil, error: errorPerfil } = await supabase
         .from("vw_perfil_usuario")
         .select("*")
@@ -99,7 +98,7 @@ export default function ProfileModal({
         });
       }
 
-      // 2. Certificaciones
+
       const { data: certs, error: errorCerts } = await supabase
         .from("vw_certificaciones_usuario")
         .select("*")
@@ -164,9 +163,10 @@ export default function ProfileModal({
     setLoading(false);
 
     if (!errorPerfil && !errorCorreo) {
+        await refreshUser();
       setIsEditing(false);
     } else {
-      // aquí podrías mostrar un toast de error
+
       console.error("Error al actualizar perfil:", {
         errorPerfil,
         errorCorreo,
