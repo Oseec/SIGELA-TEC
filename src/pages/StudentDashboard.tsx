@@ -28,29 +28,29 @@ import {
 } from "@/components/ui/select";
 
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 
-type RecursoBusqueda = {
+type RecursoDisponible = {
   recurso_id: number;
   recurso_nombre: string;
   recurso_tipo: string;
   recurso_estado: string;
-  cantidad_total: number;
   laboratorio_id: number;
   laboratorio_nombre: string;
   laboratorio_ubicacion: string | null;
   escuela_nombre: string | null;
-  // nuevos campos desde horario_laboratorio
-  fecha: string | null;        // 'YYYY-MM-DD'
-  hora_inicio: string | null;  // 'HH:MM:SS' o 'HH:MM'
-  hora_fin: string | null;     // 'HH:MM:SS' o 'HH:MM'
-  estado_bloque: string | null;
+  cantidad_disponible: number;
+  // campos opcionales cuando se usa recursos_disponibles_para_usuario
+  cumple_requisitos?: boolean;
+  mensaje_requisitos?: string | null;
 };
 
 export default function StudentDashboard() {
+  const { user } = useAuth();
+
   const [searchTerm, setSearchTerm] = useState("");
 
-  // datos de recursos desde Supabase
-  const [recursos, setRecursos] = useState<RecursoBusqueda[]>([]);
+  const [recursos, setRecursos] = useState<RecursoDisponible[]>([]);
   const [loadingRecursos, setLoadingRecursos] = useState(false);
 
   // filtros
@@ -60,6 +60,10 @@ export default function StudentDashboard() {
   const [fechaFiltro, setFechaFiltro] = useState<string>(""); // YYYY-MM-DD
   const [horaInicioFiltro, setHoraInicioFiltro] = useState<string>(""); // HH:MM
   const [horaFinFiltro, setHoraFinFiltro] = useState<string>(""); // HH:MM
+
+  // filtro avanzado por requisitos
+  const [aplicarFiltroRequisitos, setAplicarFiltroRequisitos] =
+    useState<boolean>(false);
 
   // reservas simuladas (por ahora)
   const upcomingReservations = [
@@ -81,26 +85,87 @@ export default function StudentDashboard() {
     },
   ];
 
-  // cargar recursos al montar
+  // cargar recursos disponibles cuando cambian filtros
   useEffect(() => {
     const cargarRecursos = async () => {
+      // necesitamos al menos fecha
+      if (!fechaFiltro) {
+        setRecursos([]);
+        return;
+      }
+
       setLoadingRecursos(true);
-      const { data, error } = await supabase
-        .from("vw_busqueda_recursos") // vista que incluye horario
-        .select("*");
+
+      const params: Record<string, any> = {
+        p_fecha: fechaFiltro,
+      };
+
+      if (horaInicioFiltro) params.p_hora_inicio = horaInicioFiltro;
+      if (horaFinFiltro) params.p_hora_fin = horaFinFiltro;
+      if (laboratorioFiltro !== "todos") {
+        params.p_laboratorio_id = Number(laboratorioFiltro);
+      }
+      if (tipoFiltro !== "todos") {
+        params.p_tipo_recurso = tipoFiltro;
+      }
+      if (ubicacionFiltro !== "todas") {
+        params.p_ubicacion = ubicacionFiltro;
+      }
+
+      let data: any[] | null = null;
+      let error: any = null;
+
+      // modo normal, solo criterios
+      if (!aplicarFiltroRequisitos) {
+        const resp = await supabase.rpc(
+          "recursos_disponibles_en_rango",
+          params
+        );
+        data = resp.data;
+        error = resp.error;
+      } else {
+        // modo avanzado, aplica rol y requisitos usando recursos_disponibles_para_usuario
+        if (!user) {
+          // sin usuario no se puede aplicar este filtro
+          setRecursos([]);
+          setLoadingRecursos(false);
+          return;
+        }
+
+        const resp = await supabase.rpc(
+          "recursos_disponibles_para_usuario",
+          {
+            p_usuario_id: user.id,
+            ...params,
+          }
+        );
+        data = resp.data;
+        error = resp.error;
+      }
 
       if (error) {
         console.error("Error cargando recursos:", error);
+        setRecursos([]);
       } else {
-        setRecursos(data as RecursoBusqueda[]);
+        setRecursos((data ?? []) as RecursoDisponible[]);
       }
+
       setLoadingRecursos(false);
     };
 
     cargarRecursos();
-  }, []);
+  }, [
+    user,
+    fechaFiltro,
+    horaInicioFiltro,
+    horaFinFiltro,
+    laboratorioFiltro,
+    tipoFiltro,
+    ubicacionFiltro,
+    aplicarFiltroRequisitos,
+  ]);
 
-  // opciones de filtros, calculadas a partir de los datos
+  // opciones de filtros dinámicas a partir de los recursos actuales
   const laboratoriosDisponibles = useMemo(() => {
     const map = new Map<number, string>();
     recursos.forEach((r) => {
@@ -127,59 +192,17 @@ export default function StudentDashboard() {
     );
   }, [recursos]);
 
-  // aplicar filtros y búsqueda (incluyendo fecha y horario)
+  // búsqueda por texto, criterios ya vienen filtrados desde el backend
   const recursosFiltrados = useMemo(() => {
-    return recursos
-      .filter((r) => {
-        if (!searchTerm) return true;
-        const t = searchTerm.toLowerCase();
-        return (
-          r.recurso_nombre.toLowerCase().includes(t) ||
-          r.laboratorio_nombre.toLowerCase().includes(t) ||
-          (r.escuela_nombre ?? "").toLowerCase().includes(t)
-        );
-      })
-      .filter((r) =>
-        laboratorioFiltro === "todos"
-          ? true
-          : String(r.laboratorio_id) === laboratorioFiltro
-      )
-      .filter((r) =>
-        tipoFiltro === "todos" ? true : r.recurso_tipo === tipoFiltro
-      )
-      .filter((r) =>
-        ubicacionFiltro === "todas"
-          ? true
-          : (r.laboratorio_ubicacion ?? "") === ubicacionFiltro
-      )
-      .filter((r) => {
-        if (!fechaFiltro) return true;
-        if (!r.fecha) return false;
-        return r.fecha === fechaFiltro;
-      })
-      .filter((r) => {
-        if (!horaInicioFiltro) return true;
-        if (!r.hora_inicio) return false;
-        // comparaciones de strings HH:MM funcionan bien si el formato es consistente
-        const hi = r.hora_inicio.slice(0, 5);
-        return hi <= horaInicioFiltro;
-      })
-      .filter((r) => {
-        if (!horaFinFiltro) return true;
-        if (!r.hora_fin) return false;
-        const hf = r.hora_fin.slice(0, 5);
-        return hf >= horaFinFiltro;
-      });
-  }, [
-    recursos,
-    searchTerm,
-    laboratorioFiltro,
-    tipoFiltro,
-    ubicacionFiltro,
-    fechaFiltro,
-    horaInicioFiltro,
-    horaFinFiltro,
-  ]);
+    if (!searchTerm) return recursos;
+    const t = searchTerm.toLowerCase();
+    return recursos.filter(
+      (r) =>
+        r.recurso_nombre.toLowerCase().includes(t) ||
+        r.laboratorio_nombre.toLowerCase().includes(t) ||
+        (r.escuela_nombre ?? "").toLowerCase().includes(t)
+    );
+  }, [recursos, searchTerm]);
 
   // helpers para estado y botón
   const getEstadoLabel = (estado: string) => {
@@ -308,7 +331,9 @@ export default function StudentDashboard() {
             <CardHeader>
               <CardTitle>Buscar Recursos/Laboratorios</CardTitle>
               <CardDescription>
-                Encuentra equipos y espacios disponibles
+                Filtra por laboratorio, tipo, fecha, horario y ubicación.
+                Opcionalmente puedes aplicar el filtro por requisitos
+                (certificaciones).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -431,71 +456,114 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
+              {/* toggle de filtro por requisitos */}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    aplicarFiltroRequisitos ? "default" : "outline"
+                  }
+                  onClick={() =>
+                    setAplicarFiltroRequisitos((prev) => !prev)
+                  }
+                >
+                  {aplicarFiltroRequisitos
+                    ? "Filtro por requisitos: ACTIVADO"
+                    : "Filtro por requisitos: DESACTIVADO"}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Cuando está activado, solo ves recursos en laboratorios
+                  donde cumples certificaciones.
+                </span>
+              </div>
+
               <div className="space-y-3">
                 <h3 className="font-semibold">Resultados de búsqueda:</h3>
 
-                {loadingRecursos && (
+                {!fechaFiltro && (
                   <p className="text-sm text-muted-foreground">
-                    Cargando recursos...
+                    Selecciona una fecha para ver los recursos disponibles.
                   </p>
                 )}
 
-                {!loadingRecursos && recursosFiltrados.length === 0 && (
+                {fechaFiltro && loadingRecursos && (
                   <p className="text-sm text-muted-foreground">
-                    No se encontraron recursos con los filtros
-                    seleccionados.
+                    Cargando recursos disponibles...
                   </p>
                 )}
 
-                {recursosFiltrados.map((r) => (
-                  <div
-                    key={`${r.recurso_id}-${r.fecha ?? "sin-fecha"}-${
-                      r.hora_inicio ?? "sin-inicio"
-                    }`}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div>
-                      <h4 className="font-medium">{r.recurso_nombre}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {r.laboratorio_nombre}
-                        {r.escuela_nombre && ` • ${r.escuela_nombre}`}
-                        {r.laboratorio_ubicacion &&
-                          ` • ${r.laboratorio_ubicacion}`}
-                      </p>
-                      {r.fecha && (
+                {fechaFiltro &&
+                  !loadingRecursos &&
+                  recursosFiltrados.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No se encontraron recursos disponibles con los filtros
+                      seleccionados
+                      {aplicarFiltroRequisitos
+                        ? " o no cumples los requisitos del laboratorio."
+                        : "."}
+                    </p>
+                  )}
+
+                {fechaFiltro &&
+                  !loadingRecursos &&
+                  recursosFiltrados.map((r) => (
+                    <div
+                      key={r.recurso_id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div>
+                        <h4 className="font-medium">{r.recurso_nombre}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {r.laboratorio_nombre}
+                          {r.escuela_nombre && ` • ${r.escuela_nombre}`}
+                          {r.laboratorio_ubicacion &&
+                            ` • ${r.laboratorio_ubicacion}`}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          <Calendar className="inline h-3 w-3 mr-1" />
-                          {r.fecha}
-                          {r.hora_inicio && r.hora_fin && (
+                          Fecha seleccionada: {fechaFiltro}
+                          {horaInicioFiltro && horaFinFiltro && (
                             <>
                               {" "}
-                              • <Clock className="inline h-3 w-3 mr-1" />
-                              {r.hora_inicio.slice(0, 5)} -{" "}
-                              {r.hora_fin.slice(0, 5)}
+                              • {horaInicioFiltro} - {horaFinFiltro}
                             </>
                           )}
                         </p>
-                      )}
-                      <Badge
-                        variant={getEstadoVariant(r.recurso_estado)}
-                        className="mt-2"
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cantidad disponible: {r.cantidad_disponible}
+                        </p>
+                        {aplicarFiltroRequisitos &&
+                          r.mensaje_requisitos && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {r.mensaje_requisitos}
+                            </p>
+                          )}
+                        <Badge
+                          variant={getEstadoVariant(r.recurso_estado)}
+                          className="mt-2"
+                        >
+                          {getEstadoLabel(r.recurso_estado)}
+                        </Badge>
+                      </div>
+                      <Button
+                        disabled={
+                          !isReservable(r.recurso_estado) ||
+                          r.cantidad_disponible <= 0
+                        }
                       >
-                        {getEstadoLabel(r.recurso_estado)}
-                      </Badge>
+                        {isReservable(r.recurso_estado) &&
+                        r.cantidad_disponible > 0
+                          ? "Reservar"
+                          : "No Disponible"}
+                      </Button>
                     </div>
-                    <Button disabled={!isReservable(r.recurso_estado)}>
-                      {isReservable(r.recurso_estado)
-                        ? "Reservar"
-                        : "No Disponible"}
-                    </Button>
-                  </div>
-                ))}
+                  ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* TAB: Calendario (por ahora igual que antes, mock) */}
+        {/* TAB: Calendario (mock) */}
         <TabsContent value="calendar">
           <Card>
             <CardHeader>
