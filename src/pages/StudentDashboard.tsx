@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import CalendarAvailabilityView from "@/components/CalendarAvailabilityView";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -565,40 +566,7 @@ export default function StudentDashboard() {
 
         {/* TAB: Calendario (mock) */}
         <TabsContent value="calendar">
-          <Card>
-            <CardHeader>
-              <CardTitle>Calendario Personal</CardTitle>
-              <CardDescription>
-                Vista de todas tus reservas aprobadas y pendientes
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {upcomingReservations.map((reservation, index) => (
-                  <div key={index} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">{reservation.resource}</h4>
-                      <Badge
-                        variant={
-                          reservation.status === "Aprobada"
-                            ? "default"
-                            : "secondary"
-                        }
-                      >
-                        {reservation.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {reservation.date} • {reservation.time}
-                    </p>
-                    <Button variant="outline" size="sm">
-                      Ver Detalles
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <CalendarAvailabilityView />
         </TabsContent>
 
         {/* TAB: Historial (mock) */}
