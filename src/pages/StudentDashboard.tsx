@@ -28,7 +28,17 @@ import {
 } from "@/components/ui/select";
 
 import CalendarAvailabilityView from "@/components/CalendarAvailabilityView";
+import { ReservationRequestModal, RecursoBusqueda } from "@/components/ReservationRequestModal";
+
 import { supabase } from "@/lib/supabaseClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 
 type RecursoDisponible = {
@@ -48,6 +58,17 @@ type RecursoDisponible = {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+
+  const [policiesOpen, setPoliciesOpen] = useState(false);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [selectedResource, setSelectedResource] = useState<any | null>(null);
+  const [policiesData, setPoliciesData] = useState<{
+    laboratorioNombre: string;
+    politicas: any;
+    requisitos: string[];
+    cumple: boolean;
+    mensaje: string;
+    } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -85,6 +106,58 @@ export default function StudentDashboard() {
       location: "Lab. Física Avanzada",
     },
   ];
+
+  const [recursoSeleccionado, setRecursoSeleccionado] = useState<RecursoBusqueda | null>(null);
+  const [reservarAbierto, setReservarAbierto] = useState(false);
+
+
+  const handleViewPolicies = async (recurso: any) => {
+  if (!user) return;
+
+  setSelectedResource(recurso);
+  setPoliciesOpen(true);
+  setPoliciesLoading(true);
+
+  const { data, error } = await supabase.rpc(
+    "obtener_politicas_y_requisitos",
+    {
+      p_usuario_id: user.id,
+      p_laboratorio_id: recurso.laboratorio_id,
+    }
+  );
+
+  if (error) {
+    console.error("Error obteniendo políticas:", error);
+    setPoliciesData({
+      laboratorioNombre: recurso.laboratorio_nombre,
+      politicas: null,
+      requisitos: [],
+      cumple: true,
+      mensaje:
+        "No se pudieron cargar las políticas en este momento. Intenta de nuevo más tarde.",
+    });
+  } else if (data && data.length > 0) {
+    const row = data[0];
+    setPoliciesData({
+      laboratorioNombre: row.laboratorio_nombre,
+      politicas: row.politicas,
+      requisitos: row.requisitos_certificaciones ?? [],
+      cumple: row.cumple,
+      mensaje: row.mensaje,
+    });
+  } else {
+    setPoliciesData({
+      laboratorioNombre: recurso.laboratorio_nombre,
+      politicas: null,
+      requisitos: [],
+      cumple: true,
+      mensaje: "Este laboratorio no tiene requisitos registrados.",
+    });
+  }
+
+  setPoliciesLoading(false);
+};
+
 
   // cargar recursos disponibles cuando cambian filtros
   useEffect(() => {
@@ -506,65 +579,91 @@ export default function StudentDashboard() {
                     </p>
                   )}
 
-                {fechaFiltro &&
-                  !loadingRecursos &&
-                  recursosFiltrados.map((r) => (
-                    <div
-                      key={r.recurso_id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div>
-                        <h4 className="font-medium">{r.recurso_nombre}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {r.laboratorio_nombre}
-                          {r.escuela_nombre && ` • ${r.escuela_nombre}`}
-                          {r.laboratorio_ubicacion &&
-                            ` • ${r.laboratorio_ubicacion}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Fecha seleccionada: {fechaFiltro}
-                          {horaInicioFiltro && horaFinFiltro && (
-                            <>
-                              {" "}
-                              • {horaInicioFiltro} - {horaFinFiltro}
-                            </>
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Cantidad disponible: {r.cantidad_disponible}
-                        </p>
-                        {aplicarFiltroRequisitos &&
-                          r.mensaje_requisitos && (
+                  {fechaFiltro &&
+                    !loadingRecursos &&
+                    recursosFiltrados.map((r) => (
+                      <div
+                        key={r.recurso_id}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
+                        {/* Lado izquierdo: info del recurso */}
+                        <div>
+                          <h4 className="font-medium">{r.recurso_nombre}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {r.laboratorio_nombre}
+                            {r.escuela_nombre && ` • ${r.escuela_nombre}`}
+                            {r.laboratorio_ubicacion &&
+                              ` • ${r.laboratorio_ubicacion}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Fecha seleccionada: {fechaFiltro}
+                            {horaInicioFiltro && horaFinFiltro && (
+                              <>
+                                {" "}
+                                • {horaInicioFiltro} - {horaFinFiltro}
+                              </>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Cantidad disponible: {r.cantidad_disponible}
+                          </p>
+                          {aplicarFiltroRequisitos && r.mensaje_requisitos && (
                             <p className="text-xs text-muted-foreground mt-1">
                               {r.mensaje_requisitos}
                             </p>
                           )}
-                        <Badge
-                          variant={getEstadoVariant(r.recurso_estado)}
-                          className="mt-2"
-                        >
-                          {getEstadoLabel(r.recurso_estado)}
-                        </Badge>
+                          <Badge
+                            variant={getEstadoVariant(r.recurso_estado)}
+                            className="mt-2"
+                          >
+                            {getEstadoLabel(r.recurso_estado)}
+                          </Badge>
+                        </div>
+
+                        {/* Lado derecho: ambos botones en el mismo div */}
+                        <div className="mt-4 flex flex-col items-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewPolicies(r)}
+                          >
+                            Ver requisitos
+                          </Button>
+
+                          <Button
+                            disabled={
+                              !isReservable(r.recurso_estado) ||
+                              r.cantidad_disponible <= 0
+                            }
+                            onClick={() => {
+                              // adaptar si tu objeto se llama distinto
+                              const recurso: RecursoBusqueda = {
+                                recurso_id: r.recurso_id,
+                                recurso_nombre: r.recurso_nombre,
+                                laboratorio_id: r.laboratorio_id,
+                                laboratorio_nombre: r.laboratorio_nombre,
+                                laboratorio_ubicacion: r.laboratorio_ubicacion,
+                                cantidad_disponible: r.cantidad_disponible,
+                              };
+
+                              setRecursoSeleccionado(recurso);
+                              setReservarAbierto(true);
+                            }}
+                          >
+                            {isReservable(r.recurso_estado) && r.cantidad_disponible > 0
+                              ? "Reservar"
+                              : "No Disponible"}
+                          </Button>
+
+                        </div>
                       </div>
-                      <Button
-                        disabled={
-                          !isReservable(r.recurso_estado) ||
-                          r.cantidad_disponible <= 0
-                        }
-                      >
-                        {isReservable(r.recurso_estado) &&
-                        r.cantidad_disponible > 0
-                          ? "Reservar"
-                          : "No Disponible"}
-                      </Button>
-                    </div>
-                  ))}
+                    ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* TAB: Calendario (mock) */}
+        {/* TAB: Calendario */}
         <TabsContent value="calendar">
           <CalendarAvailabilityView />
         </TabsContent>
@@ -648,6 +747,99 @@ export default function StudentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+            <Dialog open={policiesOpen} onOpenChange={setPoliciesOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Requisitos y políticas
+              {policiesData && ` · ${policiesData.laboratorioNombre}`}
+            </DialogTitle>
+            <DialogDescription>
+              Revisa esta información antes de enviar tu solicitud.
+            </DialogDescription>
+          </DialogHeader>
+
+          {policiesLoading ? (
+            <div className="py-6 text-sm text-muted-foreground">
+              Cargando políticas...
+            </div>
+          ) : policiesData ? (
+            <div className="space-y-4">
+              {/* Requisitos */}
+              <div>
+                <h3 className="text-sm font-semibold mb-1">
+                  Requisitos de acceso
+                </h3>
+                {policiesData.requisitos.length > 0 ? (
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {policiesData.requisitos.map((req, idx) => (
+                      <li key={idx}>{req}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Este laboratorio no tiene certificaciones obligatorias
+                    registradas.
+                  </p>
+                )}
+
+                <div className="mt-2">
+                  <Badge
+                    variant={policiesData.cumple ? "outline" : "destructive"}
+                    className={
+                      policiesData.cumple
+                        ? "border-green-500 text-green-700"
+                        : undefined
+                    }
+                  >
+                    {policiesData.cumple
+                      ? "Cumples con los requisitos"
+                      : "No cumples con los requisitos"}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {policiesData.mensaje}
+                  </p>
+                </div>
+              </div>
+
+              {/* Políticas */}
+              <div>
+                <h3 className="text-sm font-semibold mb-1">
+                  Políticas del laboratorio
+                </h3>
+                {policiesData.politicas ? (
+                  <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words">
+                    {typeof policiesData.politicas === "string"
+                      ? policiesData.politicas
+                      : JSON.stringify(policiesData.politicas, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Este laboratorio no tiene políticas detalladas
+                    registradas en el sistema.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="py-6 text-sm text-muted-foreground">
+              No hay información de políticas para este laboratorio.
+            </p>
+          )}
+
+          <DialogFooter className="mt-4">
+            <Button onClick={() => setPoliciesOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ReservationRequestModal
+        open={reservarAbierto}
+        onOpenChange={setReservarAbierto}
+        recurso={recursoSeleccionado}
+        fechaSeleccionada={fechaFiltro}      // tu estado de fecha
+        horaInicio={horaInicioFiltro}        // tu estado de hora inicio
+        horaFin={horaFinFiltro}              // tu estado de hora fin
+      />
     </div>
   );
 }
