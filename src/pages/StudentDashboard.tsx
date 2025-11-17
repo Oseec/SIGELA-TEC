@@ -39,6 +39,11 @@ type RecursoBusqueda = {
   laboratorio_nombre: string;
   laboratorio_ubicacion: string | null;
   escuela_nombre: string | null;
+  // nuevos campos desde horario_laboratorio
+  fecha: string | null;        // 'YYYY-MM-DD'
+  hora_inicio: string | null;  // 'HH:MM:SS' o 'HH:MM'
+  hora_fin: string | null;     // 'HH:MM:SS' o 'HH:MM'
+  estado_bloque: string | null;
 };
 
 export default function StudentDashboard() {
@@ -52,6 +57,9 @@ export default function StudentDashboard() {
   const [laboratorioFiltro, setLaboratorioFiltro] = useState<string>("todos");
   const [tipoFiltro, setTipoFiltro] = useState<string>("todos");
   const [ubicacionFiltro, setUbicacionFiltro] = useState<string>("todas");
+  const [fechaFiltro, setFechaFiltro] = useState<string>(""); // YYYY-MM-DD
+  const [horaInicioFiltro, setHoraInicioFiltro] = useState<string>(""); // HH:MM
+  const [horaFinFiltro, setHoraFinFiltro] = useState<string>(""); // HH:MM
 
   // reservas simuladas (por ahora)
   const upcomingReservations = [
@@ -78,7 +86,7 @@ export default function StudentDashboard() {
     const cargarRecursos = async () => {
       setLoadingRecursos(true);
       const { data, error } = await supabase
-        .from("vw_recursos_busqueda")
+        .from("vw_busqueda_recursos") // vista que incluye horario
         .select("*");
 
       if (error) {
@@ -119,7 +127,7 @@ export default function StudentDashboard() {
     );
   }, [recursos]);
 
-  // aplicar filtros y búsqueda
+  // aplicar filtros y búsqueda (incluyendo fecha y horario)
   const recursosFiltrados = useMemo(() => {
     return recursos
       .filter((r) => {
@@ -143,8 +151,35 @@ export default function StudentDashboard() {
         ubicacionFiltro === "todas"
           ? true
           : (r.laboratorio_ubicacion ?? "") === ubicacionFiltro
-      );
-  }, [recursos, searchTerm, laboratorioFiltro, tipoFiltro, ubicacionFiltro]);
+      )
+      .filter((r) => {
+        if (!fechaFiltro) return true;
+        if (!r.fecha) return false;
+        return r.fecha === fechaFiltro;
+      })
+      .filter((r) => {
+        if (!horaInicioFiltro) return true;
+        if (!r.hora_inicio) return false;
+        // comparaciones de strings HH:MM funcionan bien si el formato es consistente
+        const hi = r.hora_inicio.slice(0, 5);
+        return hi <= horaInicioFiltro;
+      })
+      .filter((r) => {
+        if (!horaFinFiltro) return true;
+        if (!r.hora_fin) return false;
+        const hf = r.hora_fin.slice(0, 5);
+        return hf >= horaFinFiltro;
+      });
+  }, [
+    recursos,
+    searchTerm,
+    laboratorioFiltro,
+    tipoFiltro,
+    ubicacionFiltro,
+    fechaFiltro,
+    horaInicioFiltro,
+    horaFinFiltro,
+  ]);
 
   // helpers para estado y botón
   const getEstadoLabel = (estado: string) => {
@@ -288,7 +323,7 @@ export default function StudentDashboard() {
                 />
               </div>
 
-              {/* filtros básicos de 3.2: laboratorio, tipo, ubicación */}
+              {/* filtros básicos: laboratorio, tipo, ubicación */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-4xl">
                 <div>
                   <span className="text-xs text-muted-foreground">
@@ -360,6 +395,42 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
+              {/* filtros de fecha y horario */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-4xl">
+                <div>
+                  <span className="text-xs text-muted-foreground">
+                    Fecha
+                  </span>
+                  <Input
+                    type="date"
+                    value={fechaFiltro}
+                    onChange={(e) => setFechaFiltro(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <span className="text-xs text-muted-foreground">
+                    Hora inicio
+                  </span>
+                  <Input
+                    type="time"
+                    value={horaInicioFiltro}
+                    onChange={(e) => setHoraInicioFiltro(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <span className="text-xs text-muted-foreground">
+                    Hora fin
+                  </span>
+                  <Input
+                    type="time"
+                    value={horaFinFiltro}
+                    onChange={(e) => setHoraFinFiltro(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <h3 className="font-semibold">Resultados de búsqueda:</h3>
 
@@ -378,7 +449,9 @@ export default function StudentDashboard() {
 
                 {recursosFiltrados.map((r) => (
                   <div
-                    key={r.recurso_id}
+                    key={`${r.recurso_id}-${r.fecha ?? "sin-fecha"}-${
+                      r.hora_inicio ?? "sin-inicio"
+                    }`}
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div>
@@ -389,6 +462,20 @@ export default function StudentDashboard() {
                         {r.laboratorio_ubicacion &&
                           ` • ${r.laboratorio_ubicacion}`}
                       </p>
+                      {r.fecha && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <Calendar className="inline h-3 w-3 mr-1" />
+                          {r.fecha}
+                          {r.hora_inicio && r.hora_fin && (
+                            <>
+                              {" "}
+                              • <Clock className="inline h-3 w-3 mr-1" />
+                              {r.hora_inicio.slice(0, 5)} -{" "}
+                              {r.hora_fin.slice(0, 5)}
+                            </>
+                          )}
+                        </p>
+                      )}
                       <Badge
                         variant={getEstadoVariant(r.recurso_estado)}
                         className="mt-2"
