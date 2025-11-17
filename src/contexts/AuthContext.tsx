@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else if (user.role === "technician") {
             navigate("/technician-dashboard", { replace: true });
           } else if (user.role === "lab_admin") {
-            navigate("/lab-detail", { replace: true });
+            navigate("/lab-admin", { replace: true });
           } else {
             navigate("/dashboard", { replace: true });
           }

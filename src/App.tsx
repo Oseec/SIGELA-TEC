@@ -19,7 +19,7 @@ import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Audit from "./pages/Audit";
 import Reports from "./pages/Reports";
-import LabDetail from "./pages/LabDetail";
+import LabAdminDashboard from "./pages/LabAdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,7 +58,7 @@ const App = () => (
               <Route path="/technician-dashboard" element={<TechnicianDashboard />} />
               
               {/* Lab Admin routes */}
-              <Route path="/lab-detail" element={<LabDetail />} />
+              <Route path="/lab-admin" element={<LabAdminDashboard />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

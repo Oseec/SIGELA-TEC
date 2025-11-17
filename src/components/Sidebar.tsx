@@ -70,13 +70,12 @@ const getMenuItemsByRole = (role: UserRole): MenuGroup[] => {
       {
         group: "Principal",
         items: [
-          { title: "Dashboard", url: "/dashboard", icon: Home },
+          { title: "Inicio", url: "/lab-admin", icon: Home },
         ],
       },
       {
         group: "Laboratorio",
         items: [
-          { title: "Mi Laboratorio", url: "/lab-detail", icon: FlaskConical },
           { title: "Reservas", url: "/reservations", icon: Calendar },
         ],
       },
