@@ -1,7 +1,7 @@
 // src/pages/LabAdminDashboard.tsx
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, Package, FileText, Clock, Shield, Calendar } from "lucide-react";
+import { Building2, Users, Package, FileText, Clock, Shield, Calendar, ChevronDown } from "lucide-react";
 import { useLabAdmin } from "@/hooks/useLabAdmin";
 import LabProfileForm from "@/components/lab/LabProfileForm";
 import ResponsibleList from "@/components/lab/ResponsibleList";
@@ -9,9 +9,16 @@ import ResourceList from "@/components/lab/ResourceList";
 import PoliciesEditor from "@/components/lab/PoliciesEditor";
 import LabHistory from "@/components/lab/LabHistory";
 import LabAvailabilityPage from "@/components/lab/LabAvailabilityPage";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function LabAdminDashboard() {
-  const { laboratorio, isLoading } = useLabAdmin();
+  const { laboratorios, laboratorio, setLaboratorio, isLoading } = useLabAdmin();
 
   if (isLoading) {
     return (
@@ -43,24 +50,64 @@ export default function LabAdminDashboard() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      {/* HEADER CON SELECTOR DE LABORATORIO */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Gestión de Laboratorio</h1>
           <p className="text-muted-foreground">Administra tu laboratorio y sus recursos</p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-medium">{laboratorio.nombre}</p>
-            <p className="text-xs text-muted-foreground">{laboratorio.codigo}</p>
+
+        {/* SELECTOR DE LABORATORIO (solo aparece si hay más de 1) */}
+        {laboratorios.length > 1 && (
+          <div className="flex items-center gap-3">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
+            <Select
+              value={laboratorio.id.toString()}
+              onValueChange={(value) => setLaboratorio(Number(value))}
+            >
+              <SelectTrigger className="w-72">
+                <SelectValue>
+                  <div className="flex flex-col text-left">
+                    <span className="font-medium">{laboratorio.nombre}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {laboratorio.codigo} • {laboratorio.ubicacion}
+                    </span>
+                  </div>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {laboratorios.map((lab) => (
+                  <SelectItem key={lab.id} value={lab.id.toString()}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{lab.nombre}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {lab.codigo} • {lab.ubicacion}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Building2 className="h-7 w-7 text-primary" />
+        )}
+
+        {/* SI SOLO TIENE UNO, MUESTRA COMO ANTES */}
+        {laboratorios.length === 1 && (
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm font-medium">{laboratorio.nombre}</p>
+              <p className="text-xs text-muted-foreground">{laboratorio.codigo}</p>
+            </div>
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Building2 className="h-7 w-7 text-primary" />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
+      {/* TABS */}
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="profile">
             <Shield className="mr-2 h-4 w-4" />
             Perfil
@@ -83,27 +130,17 @@ export default function LabAdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="availability">
             <Calendar className="mr-2 h-4 w-4" />
-             Disponibilidad y Recursos
+            Disponibilidad
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile">
-          <LabProfileForm />
-        </TabsContent>
-        <TabsContent value="responsibles">
-          <ResponsibleList />
-        </TabsContent>
-        <TabsContent value="resources">
-          <ResourceList />
-        </TabsContent>
-        <TabsContent value="policies">
-          <PoliciesEditor />
-        </TabsContent>
-        <TabsContent value="history">
-          <LabHistory />
-        </TabsContent>
+        <TabsContent value="profile"><LabProfileForm /></TabsContent>
+        <TabsContent value="responsibles"><ResponsibleList /></TabsContent>
+        <TabsContent value="resources"><ResourceList /></TabsContent>
+        <TabsContent value="policies"><PoliciesEditor /></TabsContent>
+        <TabsContent value="history"><LabHistory /></TabsContent>
         <TabsContent value="availability" className="space-y-6">
-            <LabAvailabilityPage />
+          <LabAvailabilityPage />
         </TabsContent>
       </Tabs>
     </div>

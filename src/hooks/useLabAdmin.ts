@@ -2,8 +2,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { create } from 'zustand';
+import { useEffect } from 'react';
 
-// Tipos finales que usamos en la UI
+// TIPOS
 export type Laboratorio = {
   id: number;
   nombre: string;
@@ -16,10 +18,11 @@ export type Laboratorio = {
 };
 
 export type Responsable = {
-  id: number;
-  cargo: string;
-  telefono: string | null;
+  usuario_id: string;
   nombre_completo: string;
+  rol: string;
+  telefono: string | null;
+  email: string | null;
 };
 
 export type Recurso = {
@@ -40,117 +43,116 @@ export type BitacoraEntry = {
   nombre_usuario: string;
 };
 
-// Tipos internos para datos crudos
-type ResponsableRaw = {
-  id: number;
-  cargo: string;
-  telefono: string | null;
-  usuario_id: string;
+
+type LabStore = {
+  selectedLabId: number | null;
+  setSelectedLabId: (id: number | null) => void;
 };
 
-type PerfilUsuario = {
-  id: string;
-  nombre_completo: string;
-};
+const useLabStore = create<LabStore>((set) => ({
+  selectedLabId: null,
+  setSelectedLabId: (id) => set({ selectedLabId: id }),
+}));
 
-type BitacoraRaw = {
-  id: number;
-  fecha_hora: string;
-  accion: string;
-  usuario_id: string | null;
-};
 
 export const useLabAdmin = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { selectedLabId, setSelectedLabId } = useLabStore();
 
-  // 1. Laboratorio del usuario
-  const { data: laboratorio, isLoading } = useQuery<Laboratorio | null>({
-    queryKey: ['mi_laboratorio', user?.id],
+  // 1. Todos los laboratorios del usuario
+  const { data: laboratorios = [], isLoading: loadingLabs } = useQuery<Laboratorio[]>({
+    queryKey: ['mis_laboratorios', user?.id],
     queryFn: async () => {
-      if (!user?.id) return null;
+      if (!user?.id) return [];
 
-      const { data: rl } = await supabase
+      const { data: asignaciones } = await supabase
         .from('responsable_laboratorio')
         .select('laboratorio_id')
-        .eq('usuario_id', user.id)
-        .single();
+        .eq('usuario_id', user.id);
 
-      if (!rl) throw new Error('No eres responsable de ningún laboratorio');
+      if (!asignaciones || asignaciones.length === 0) return [];
 
-      const { data: lab } = await supabase
+      const labIds = asignaciones.map(a => a.laboratorio_id);
+
+      const { data: labs } = await supabase
         .from('laboratorio')
         .select('*')
-        .eq('id', rl.laboratorio_id)
-        .single();
+        .in('id', labIds);
 
-      return lab || null;
+      return labs ?? [];
     },
     enabled: !!user?.id,
   });
+
+  // Laboratorio actual: seleccionado o el primero
+  const laboratorio = laboratorios.find(l => l.id === selectedLabId) || laboratorios[0] || null;
+
+  // Auto-seleccionar el primero si no hay selección
+  useEffect(() => {
+    if (laboratorios.length > 0 && !selectedLabId) {
+      setSelectedLabId(laboratorios[0].id);
+    }
+  }, [laboratorios, selectedLabId, setSelectedLabId]);
 
   // 2. Recursos
   const { data: recursos = [] } = useQuery<Recurso[]>({
     queryKey: ['recursos', laboratorio?.id],
     queryFn: async () => {
+      if (!laboratorio?.id) return [];
       const { data } = await supabase
         .from('recurso')
         .select('*')
-        .eq('laboratorio_id', laboratorio!.id)
+        .eq('laboratorio_id', laboratorio.id)
         .order('nombre');
       return data ?? [];
     },
     enabled: !!laboratorio?.id,
   });
 
-  // 3. Responsables → 100% tipado, sin any
+  // 3. Responsables
   const { data: responsables = [] } = useQuery<Responsable[]>({
     queryKey: ['responsables', laboratorio?.id],
     queryFn: async () => {
-      const { data: raw } = await supabase
-        .from('responsable_laboratorio')
-        .select('id, cargo, telefono, usuario_id')
-        .eq('laboratorio_id', laboratorio!.id) as { data: ResponsableRaw[] | null };
+      if (!laboratorio?.id) return [];
 
-      if (!raw || raw.length === 0) return [];
+      const { data, error } = await supabase
+        .rpc('get_responsables_laboratorio', { lab_id: laboratorio.id });
 
-      const userIds = raw.map(r => r.usuario_id);
-      const { data: perfiles } = await supabase
-        .from('perfil_usuario')
-        .select('id, nombre_completo')
-        .in('id', userIds) as { data: PerfilUsuario[] | null };
+      if (error) {
+        console.error('Error cargando responsables:', error);
+        return [];
+      }
 
-      const perfilMap = new Map(perfiles?.map(p => [p.id, p.nombre_completo]) ?? []);
-
-      return raw.map((r): Responsable => ({
-        id: r.id,
-        cargo: r.cargo,
-        telefono: r.telefono,
-        nombre_completo: perfilMap.get(r.usuario_id) ?? 'Sin nombre',
-      }));
+      return data as Responsable[]; 
     },
     enabled: !!laboratorio?.id,
   });
 
-  // 4. Bitácora → 100% tipado, sin any
+  // 4. Bitácora
   const { data: bitacora = [] } = useQuery<BitacoraEntry[]>({
     queryKey: ['bitacora', laboratorio?.id],
     queryFn: async () => {
+      if (!laboratorio?.id) return [];
+
       const { data: raw } = await supabase
         .from('bitacora')
         .select('id, fecha_hora, accion, usuario_id')
-        .or(`registro_id.eq.${laboratorio!.id},tabla_afectada.eq.laboratorio`)
+        .or(`registro_id.eq.${laboratorio.id},tabla_afectada.eq.laboratorio`)
         .order('fecha_hora', { ascending: false })
-        .limit(50) as { data: BitacoraRaw[] | null };
+        .limit(50);
 
       if (!raw || raw.length === 0) return [];
 
-      const userIds = raw.map(b => b.usuario_id).filter(Boolean) as string[];
+      const userIds = raw
+        .map(b => b.usuario_id)
+        .filter(Boolean) as string[];
+
       const { data: perfiles } = userIds.length > 0
         ? await supabase
             .from('perfil_usuario')
             .select('id, nombre_completo')
-            .in('id', userIds) as { data: PerfilUsuario[] | null }
+            .in('id', userIds)
         : { data: null };
 
       const perfilMap = new Map(perfiles?.map(p => [p.id, p.nombre_completo]) ?? []);
@@ -168,22 +170,28 @@ export const useLabAdmin = () => {
   // 5. Actualizar laboratorio
   const updateLab = useMutation({
     mutationFn: async (updates: Partial<Laboratorio>) => {
+      if (!laboratorio?.id) throw new Error('No hay laboratorio seleccionado');
       const { error } = await supabase
         .from('laboratorio')
         .update(updates)
-        .eq('id', laboratorio!.id);
+        .eq('id', laboratorio.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mi_laboratorio'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mis_laboratorios'] });
+      queryClient.invalidateQueries({ queryKey: ['mi_laboratorio'] });
+    },
   });
 
   return {
+    laboratorios,
     laboratorio,
-    isLoading,
+    setLaboratorio: setSelectedLabId,
     recursos,
     responsables,
     bitacora,
     updateLab: updateLab.mutateAsync,
     isUpdating: updateLab.isPending,
+    isLoading: loadingLabs || !laboratorio,
   };
 };
