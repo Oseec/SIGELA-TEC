@@ -51,7 +51,7 @@ export default function Auth() {
               <Building2 className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">SIGLA</CardTitle>
+          <CardTitle className="text-2xl font-bold">SIGELA</CardTitle>
           <CardDescription>
             Sistema Integral de Gestión de Laboratorios Académicos
           </CardDescription>

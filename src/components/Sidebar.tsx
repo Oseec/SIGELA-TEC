@@ -134,7 +134,7 @@ export const Sidebar = () => {
             </div>
             {!isCollapsed && (
               <div>
-                <h2 className="text-sm font-semibold text-sidebar-foreground">SIGLA</h2>
+                <h2 className="text-sm font-semibold text-sidebar-foreground">SIGELA</h2>
                 <p className="text-xs text-sidebar-foreground/70">Sistema de Laboratorios</p>
               </div>
             )}

@@ -36,11 +36,30 @@ export type Recurso = {
   ultima_mantenimiento: string | null;
 };
 
+export type TipoActividad =
+  | "reserva_creada"
+  | "reserva_aprobada"
+  | "reserva_rechazada"
+  | "reserva_cancelada"
+  | "reserva_completada"
+  | "recurso_entregado"
+  | "recurso_devuelto"
+  | "mantenimiento_programado"
+  | "mantenimiento_completado"
+  | "politicas_actualizadas"
+  | "recurso_agregado"
+  | "recurso_modificado"
+  | "otro";
+
 export type BitacoraEntry = {
   id: number;
-  fecha_hora: string;
-  accion: string;
+  fecha_hora: string;          
+  tipo_actividad: TipoActividad;
+  usuario_id: string;
   nombre_usuario: string;
+  accion: string;              
+  detalles?: string | null;    
+  recurso_afectado?: string | null; 
 };
 
 
@@ -59,6 +78,28 @@ export const useLabAdmin = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { selectedLabId, setSelectedLabId } = useLabStore();
+
+function mapAccionToTipoActividad(accion: string): TipoActividad {
+  const known: TipoActividad[] = [
+    "reserva_creada",
+    "reserva_aprobada",
+    "reserva_rechazada",
+    "reserva_cancelada",
+    "reserva_completada",
+    "recurso_entregado",
+    "recurso_devuelto",
+    "mantenimiento_programado",
+    "mantenimiento_completado",
+    "politicas_actualizadas",
+    "recurso_agregado",
+    "recurso_modificado",
+  ];
+
+  return known.includes(accion as TipoActividad)
+    ? (accion as TipoActividad)
+    : "otro";
+}
+
 
   // 1. Todos los laboratorios del usuario
   const { data: laboratorios = [], isLoading: loadingLabs } = useQuery<Laboratorio[]>({
@@ -131,41 +172,90 @@ export const useLabAdmin = () => {
 
   // 4. Bitácora
   const { data: bitacora = [] } = useQuery<BitacoraEntry[]>({
-    queryKey: ['bitacora', laboratorio?.id],
+    queryKey: ["bitacora", laboratorio?.id],
     queryFn: async () => {
       if (!laboratorio?.id) return [];
 
-      const { data: raw } = await supabase
+      const { data: raw, error } = await supabase
         .from('bitacora')
-        .select('id, fecha_hora, accion, usuario_id')
-        .or(`registro_id.eq.${laboratorio.id},tabla_afectada.eq.laboratorio`)
+        .select(
+          'id, fecha_hora, accion, usuario_id, detalles, tabla_afectada, registro_id'
+        )
+        // por ahora sin filtro por laboratorio, solo las últimas acciones
         .order('fecha_hora', { ascending: false })
         .limit(50);
 
+      if (error) {
+        console.error("Error cargando bitácora", error);
+        return [];
+      }
+
       if (!raw || raw.length === 0) return [];
 
-      const userIds = raw
-        .map(b => b.usuario_id)
+      // Sacar los ids de usuario
+      const userIds = (raw as any[])
+        .map((b) => b.usuario_id)
         .filter(Boolean) as string[];
 
-      const { data: perfiles } = userIds.length > 0
-        ? await supabase
-            .from('perfil_usuario')
-            .select('id, nombre_completo')
-            .in('id', userIds)
-        : { data: null };
+      const { data: perfiles } =
+        userIds.length > 0
+          ? await supabase
+              .from("perfil_usuario")
+              .select("id, nombre_completo")
+              .in("id", userIds)
+          : { data: null };
 
-      const perfilMap = new Map(perfiles?.map(p => [p.id, p.nombre_completo]) ?? []);
+      const perfilMap = new Map(
+        (perfiles ?? []).map((p: any) => [p.id, p.nombre_completo])
+      );
 
-      return raw.map((b): BitacoraEntry => ({
-        id: b.id,
-        fecha_hora: b.fecha_hora,
-        accion: b.accion,
-        nombre_usuario: b.usuario_id ? (perfilMap.get(b.usuario_id) ?? 'Sistema') : 'Sistema',
-      }));
+      return (raw as any[]).map((b): BitacoraEntry => {
+        const displayName = b.usuario_id
+          ? perfilMap.get(b.usuario_id) ?? "Sistema"
+          : "Sistema";
+
+        // detalles viene como jsonb, lo convertimos a texto legible
+        let detallesTexto: string | null = null;
+        let recursoAfectado: string | null = null;
+
+        if (typeof b.detalles === "string") {
+          detallesTexto = b.detalles;
+        } else if (b.detalles && typeof b.detalles === "object") {
+          // intenta tomar campos comunes, si no, usa JSON completo
+          detallesTexto =
+            (b.detalles.descripcion as string | undefined) ??
+            (b.detalles.detalles as string | undefined) ??
+            null;
+
+          recursoAfectado =
+            (b.detalles.recurso as string | undefined) ??
+            (b.detalles.recurso_nombre as string | undefined) ??
+            null;
+
+          if (!detallesTexto) {
+            try {
+              detallesTexto = JSON.stringify(b.detalles);
+            } catch {
+              detallesTexto = null;
+            }
+          }
+        }
+
+        return {
+          id: b.id,
+          fecha_hora: b.fecha_hora,
+          tipo_actividad: mapAccionToTipoActividad(b.accion),
+          usuario_id: b.usuario_id ?? "sistema",
+          nombre_usuario: displayName,
+          accion: b.accion,
+          detalles: detallesTexto,
+          recurso_afectado: recursoAfectado,
+        };
+      });
     },
     enabled: !!laboratorio?.id,
   });
+
 
   // 5. Actualizar laboratorio
   const updateLab = useMutation({
