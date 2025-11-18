@@ -89,7 +89,6 @@ const getMenuItemsByRole = (role: UserRole): MenuGroup[] => {
         group: "Principal",
         items: [
           { title: "Dashboard", url: "/dashboard", icon: Home },
-          { title: "Laboratorios", url: "/laboratories", icon: FlaskConical },
         ],
       },
       {

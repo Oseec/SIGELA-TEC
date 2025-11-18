@@ -4,16 +4,95 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Shield, User, Package } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
 import { useBitacora } from "@/hooks/useBitacora";
+
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function Audit() {
   const [userFilter, setUserFilter] = useState("all");
   const [moduleFilter, setModuleFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const limit = 5;
 
-  const { data: activities, isLoading } = useBitacora({ userFilter, moduleFilter });
+  const { data, isLoading } = useBitacora({ userFilter, moduleFilter, page, limit });
+
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+
+  // ========== EXPORTAR CSV ==========
+  const exportCSV = () => {
+    const headers = ["Usuario", "Módulo", "Acción", "Detalles", "Fecha"];
+
+    const csvRows = rows.map(a => [
+      a.perfil_usuario?.nombre_completo ?? "—",
+      a.tabla_afectada,
+      a.accion,
+      JSON.stringify(a.detalles ?? {}),
+      new Date(a.fecha_hora).toLocaleString("es-CR"),
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," +
+      [headers, ...csvRows].map(e => e.join(",")).join("\n");
+
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "auditoria.csv";
+    link.click();
+  };
+
+  // ========== EXPORTAR EXCEL ==========
+  const exportExcel = () => {
+    const xlsRows = rows.map(a => ({
+      Usuario: a.perfil_usuario?.nombre_completo ?? "—",
+      Modulo: a.tabla_afectada,
+      Acción: a.accion,
+      Detalles: JSON.stringify(a.detalles ?? {}),
+      Fecha: new Date(a.fecha_hora).toLocaleString("es-CR"),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(xlsRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Auditoría");
+
+    XLSX.writeFile(wb, "auditoria.xlsx");
+  };
+
+  // ========== EXPORTAR PDF ==========
+  const exportPDF = () => {
+    const doc = new jsPDF();
+
+    const tableData = rows.map(a => [
+      a.perfil_usuario?.nombre_completo ?? "—",
+      a.tabla_afectada,
+      a.accion,
+      JSON.stringify(a.detalles ?? {}),
+      new Date(a.fecha_hora).toLocaleString("es-CR"),
+    ]);
+
+    autoTable(doc, {
+      head: [["Usuario", "Módulo", "Acción", "Detalles", "Fecha"]],
+      body: tableData,
+      styles: { fontSize: 8 },
+
+      columnStyles: {
+        0: { cellWidth: 30 }, // Usuario
+        1: { cellWidth: 25 }, // Módulo
+        2: { cellWidth: 42 }, // Acción
+        3: { cellWidth: 65 }, // Detalles
+        4: { cellWidth: 20 }, // Fecha
+      },
+    });
+
+    doc.save("auditoria.pdf");
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+
       <div>
         <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
           <Shield className="h-8 w-8" />
@@ -24,6 +103,13 @@ export default function Audit() {
         </p>
       </div>
 
+      {/* === BOTONES DE EXPORTACIÓN === */}
+      <div className="flex gap-3">
+        <Button onClick={exportCSV}>Exportar CSV</Button>
+        <Button onClick={exportExcel}>Exportar Excel</Button>
+        <Button onClick={exportPDF}>Exportar PDF</Button>
+      </div>
+
       {/* === FILTROS === */}
       <Card>
         <CardHeader>
@@ -32,11 +118,10 @@ export default function Audit() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
-            
-            {/* Filtro usuario */}
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Filtrar por Usuario</label>
-              <Select value={userFilter} onValueChange={setUserFilter}>
+              <Select value={userFilter} onValueChange={value => { setPage(1); setUserFilter(value); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos los usuarios" />
                 </SelectTrigger>
@@ -50,10 +135,9 @@ export default function Audit() {
               </Select>
             </div>
 
-            {/* Filtro módulo */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Filtrar por Módulo</label>
-              <Select value={moduleFilter} onValueChange={setModuleFilter}>
+              <Select value={moduleFilter} onValueChange={value => { setPage(1); setModuleFilter(value); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos los módulos" />
                 </SelectTrigger>
@@ -92,11 +176,10 @@ export default function Audit() {
                   <TableHead>Fecha</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {activities?.map((a) => (
+                {rows.map((a) => (
                   <TableRow key={a.id}>
-                    
-                    {/* Usuario */}
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
@@ -106,36 +189,29 @@ export default function Audit() {
                       </div>
                     </TableCell>
 
-                    {/* Módulo */}
-                    <TableCell>
-                      <Badge variant="outline">{a.tabla_afectada}</Badge>
-                    </TableCell>
-
-                    {/* Acción */}
-                    <TableCell className="max-w-md">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                        {a.accion}
-                      </div>
-                    </TableCell>
-
-                    {/* Detalles */}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {a.detalles ? JSON.stringify(a.detalles) : "-"}
-                    </TableCell>
-
-                    {/* Fecha */}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(a.fecha_hora).toLocaleString("es-CR")}
-                    </TableCell>
-
+                    <TableCell><Badge variant="outline">{a.tabla_afectada}</Badge></TableCell>
+                    <TableCell>{a.accion}</TableCell>
+                    <TableCell className="text-sm">{JSON.stringify(a.detalles)}</TableCell>
+                    <TableCell className="text-sm">{new Date(a.fecha_hora).toLocaleString("es-CR")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
+
+          {!isLoading && rows.length === 0 && <p className="text-muted-foreground">No hay registros para los filtros seleccionados.</p>}
+
+          {/* === PAGINACIÓN === */}
+          <div className="flex justify-between items-center mt-4">
+            <Button disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</Button>
+
+            <p>Página {page}</p>
+
+            <Button disabled={page * limit >= total} onClick={() => setPage(page + 1)}>Siguiente</Button>
+          </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }

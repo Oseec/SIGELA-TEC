@@ -21,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string, selectedRole: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  session: Session | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,14 +29,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [pendingRole, setPendingRole] = useState<UserRole | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
       if (session) cargarPerfil(session);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
+      setSession(session);
       if (session) cargarPerfil(session);
       else {
         setUser(null);
@@ -162,6 +166,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     login,
     logout,
     refreshUser,
+    session,
   }}
 >
   {children}

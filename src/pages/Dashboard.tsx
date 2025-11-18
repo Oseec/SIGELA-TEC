@@ -2,7 +2,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Beaker,
   Calendar,
   Settings,
   UserPlus,
@@ -13,6 +12,7 @@ import {
   Clock,
   ArrowRight,
   XCircle,
+  ClipboardList,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDashboard } from "@/hooks/useDashboard";
@@ -206,11 +206,11 @@ export default function Dashboard() {
               </Link>
             </Button>
             <Button variant="outline" className="h-auto flex-col items-start p-4 gap-2" asChild>
-              <Link to="/laboratories">
-                <Beaker className="h-6 w-6 text-secondary" />
+              <Link to="/audit">
+                <ClipboardList className="h-6 w-6 text-secondary" />
                 <div className="text-left">
-                  <p className="font-semibold">Ver Laboratorios</p>
-                  <p className="text-xs text-muted-foreground">Explorar disponibilidad</p>
+                  <p className="font-semibold">Ver Auditoría</p>
+                  <p className="text-xs text-muted-foreground">Explorar registros</p>
                 </div>
               </Link>
             </Button>
