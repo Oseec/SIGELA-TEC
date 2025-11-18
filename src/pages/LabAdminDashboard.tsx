@@ -1,7 +1,10 @@
 // src/pages/LabAdminDashboard.tsx
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, Package, FileText, Clock, Shield, Calendar, ChevronDown } from "lucide-react";
+import { 
+  Building2, Users, Package, FileText, Clock, Shield, 
+  Calendar, ClipboardList 
+} from "lucide-react";
 import { useLabAdmin } from "@/hooks/useLabAdmin";
 import LabProfileForm from "@/components/lab/LabProfileForm";
 import ResponsibleList from "@/components/lab/ResponsibleList";
@@ -9,6 +12,7 @@ import ResourceList from "@/components/lab/ResourceList";
 import PoliciesEditor from "@/components/lab/PoliciesEditor";
 import LabHistory from "@/components/lab/LabHistory";
 import LabAvailabilityPage from "@/components/lab/LabAvailabilityPage";
+import LabRequestsManager from "@/components/lab/LabRequestsManager";
 import {
   Select,
   SelectContent,
@@ -106,8 +110,12 @@ export default function LabAdminDashboard() {
       </div>
 
       {/* TABS */}
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+      <Tabs defaultValue="requests" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="requests">
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Solicitudes
+          </TabsTrigger>
           <TabsTrigger value="profile">
             <Shield className="mr-2 h-4 w-4" />
             Perfil
@@ -134,11 +142,24 @@ export default function LabAdminDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile"><LabProfileForm /></TabsContent>
-        <TabsContent value="responsibles"><ResponsibleList /></TabsContent>
-        <TabsContent value="resources"><ResourceList /></TabsContent>
-        <TabsContent value="policies"><PoliciesEditor /></TabsContent>
-        <TabsContent value="history"><LabHistory /></TabsContent>
+        <TabsContent value="requests">
+          <LabRequestsManager />
+        </TabsContent>
+        <TabsContent value="profile">
+          <LabProfileForm />
+        </TabsContent>
+        <TabsContent value="responsibles">
+          <ResponsibleList />
+        </TabsContent>
+        <TabsContent value="resources">
+          <ResourceList />
+        </TabsContent>
+        <TabsContent value="policies">
+          <PoliciesEditor />
+        </TabsContent>
+        <TabsContent value="history">
+          <LabHistory />
+        </TabsContent>
         <TabsContent value="availability" className="space-y-6">
           <LabAvailabilityPage />
         </TabsContent>
