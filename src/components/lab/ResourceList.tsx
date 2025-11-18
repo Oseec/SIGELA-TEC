@@ -250,13 +250,221 @@ function AddResourceDialog({
   );
 }
 
+interface EditResourceDialogProps {
+  recurso: LabResource;
+  onUpdated: (recurso: LabResource) => void;
+}
+
+/**
+ * Modal para editar un recurso existente
+ */
+function EditResourceDialog({ recurso, onUpdated }: EditResourceDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [nombre, setNombre] = useState(recurso.nombre);
+  const [codigoInventario, setCodigoInventario] = useState(
+    recurso.codigo_inventario ?? ""
+  );
+  const [estado, setEstado] = useState(recurso.estado || "disponible");
+  const [cantidadTotal, setCantidadTotal] = useState(
+    recurso.cantidad_total != null ? String(recurso.cantidad_total) : ""
+  );
+  const [puntoReorden, setPuntoReorden] = useState(
+    recurso.punto_reorden != null ? String(recurso.punto_reorden) : ""
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const tipo = recurso.tipo;
+
+  const loadFromResource = () => {
+    setNombre(recurso.nombre);
+    setCodigoInventario(recurso.codigo_inventario ?? "");
+    setEstado(recurso.estado || "disponible");
+    setCantidadTotal(
+      recurso.cantidad_total != null ? String(recurso.cantidad_total) : ""
+    );
+    setPuntoReorden(
+      recurso.punto_reorden != null ? String(recurso.punto_reorden) : ""
+    );
+  };
+
+  const handleOpenChange = (value: boolean) => {
+    setOpen(value);
+    if (value) {
+      loadFromResource();
+    }
+  };
+
+  const handleSave = async () => {
+    if (!nombre.trim()) {
+      toast.error("Debes ingresar un nombre");
+      return;
+    }
+
+    if (!codigoInventario.trim()) {
+      toast.error("Debes ingresar un código de inventario");
+      return;
+    }
+
+    if (tipo === "consumible" && !cantidadTotal) {
+      toast.error("Debes indicar el stock");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const payload: any = {
+        nombre: nombre.trim(),
+        codigo_inventario: codigoInventario.trim(),
+      };
+
+      if (tipo === "equipo") {
+        payload.estado = estado;
+      }
+
+      if (tipo === "consumible") {
+        payload.cantidad_total = Number(cantidadTotal) || 0;
+        payload.punto_reorden = Number(puntoReorden) || 0;
+      }
+
+      const { data, error } = await supabase
+        .from("recurso")
+        .update(payload)
+        .eq("id", recurso.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error actualizando recurso:", error);
+        toast.error("No se pudo actualizar el recurso");
+        return;
+      }
+
+      const actualizado: LabResource = {
+        id: data.id,
+        tipo: data.tipo,
+        nombre: data.nombre,
+        codigo_inventario: data.codigo_inventario,
+        estado: data.estado,
+        ultima_mantenimiento: data.ultima_mantenimiento,
+        cantidad_total: data.cantidad_total,
+        punto_reorden: data.punto_reorden,
+      };
+
+      onUpdated(actualizado);
+      toast.success("Recurso actualizado correctamente");
+      setOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="xs" variant="outline">
+          Editar
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            Editar {tipo === "equipo" ? "equipo" : "consumible"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Tipo de recurso</Label>
+            <p className="text-sm text-muted-foreground">
+              {tipo === "equipo" ? "Equipo fijo" : "Material consumible"}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Nombre</Label>
+            <Input
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Código de inventario</Label>
+            <Input
+              value={codigoInventario}
+              onChange={(e) => setCodigoInventario(e.target.value)}
+            />
+          </div>
+
+          {tipo === "equipo" && (
+            <div className="space-y-1">
+              <Label>Estado</Label>
+              <Select value={estado} onValueChange={setEstado}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="disponible">Disponible</SelectItem>
+                  <SelectItem value="en_mantenimiento">En mantenimiento</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {tipo === "consumible" && (
+            <>
+              <div className="space-y-1">
+                <Label>Stock</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cantidadTotal}
+                  onChange={(e) => setCantidadTotal(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Punto de reorden</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={puntoReorden}
+                  onChange={(e) => setPuntoReorden(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={isSaving}
+          >
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            Guardar cambios
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // =======================================
 // Listado principal
 // =======================================
 
 export default function ResourceList() {
   const { recursos, laboratorio } = useLabAdmin();
-  const [localRecursos, setLocalRecursos] = useState<LabResource[]>(recursos as LabResource[]);
+  const [localRecursos, setLocalRecursos] = useState<LabResource[]>(
+    recursos as LabResource[]
+  );
 
   useEffect(() => {
     setLocalRecursos(recursos as LabResource[]);
@@ -294,6 +502,7 @@ export default function ResourceList() {
                   <TableHead>Código</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Último Mantenimiento</TableHead>
+                  <TableHead className="w-[110px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -311,6 +520,16 @@ export default function ResourceList() {
                       </Badge>
                     </TableCell>
                     <TableCell>{e.ultima_mantenimiento || "-"}</TableCell>
+                    <TableCell>
+                      <EditResourceDialog
+                        recurso={e}
+                        onUpdated={(upd) =>
+                          setLocalRecursos((prev) =>
+                            prev.map((r) => (r.id === upd.id ? upd : r))
+                          )
+                        }
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -337,6 +556,7 @@ export default function ResourceList() {
                   <TableHead>Stock</TableHead>
                   <TableHead>Punto Reorden</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead className="w-[110px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -355,6 +575,16 @@ export default function ResourceList() {
                         <Badge variant={esCritico ? "destructive" : "default"}>
                           {esCritico ? "Crítico" : "Normal"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <EditResourceDialog
+                          recurso={c}
+                          onUpdated={(upd) =>
+                            setLocalRecursos((prev) =>
+                              prev.map((r) => (r.id === upd.id ? upd : r))
+                            )
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   );
