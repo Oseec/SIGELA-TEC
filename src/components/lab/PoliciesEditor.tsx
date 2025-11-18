@@ -1,6 +1,12 @@
 // src/components/lab/PoliciesEditor.tsx
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,8 +40,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/lib/supabaseClient";
 
-type DiaSemana = "lunes" | "martes" | "miércoles" | "jueves" | "viernes" | "sábado" | "domingo";
+type DiaSemana =
+  | "lunes"
+  | "martes"
+  | "miércoles"
+  | "jueves"
+  | "viernes"
+  | "sábado"
+  | "domingo";
 
 interface HorarioDia {
   dia: DiaSemana;
@@ -55,6 +69,7 @@ interface Requisito {
 export default function PoliciesEditor() {
   const { laboratorio } = useLabAdmin();
   const [editMode, setEditMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Estado para horarios
   const [horarios, setHorarios] = useState<HorarioDia[]>([
@@ -103,6 +118,45 @@ export default function PoliciesEditor() {
     "• Uso obligatorio de bata de laboratorio\n• Prohibido comer o beber dentro del laboratorio\n• Los equipos deben ser devueltos limpios y en buen estado"
   );
 
+  // Cargar políticas existentes desde el laboratorio (si hay)
+  useEffect(() => {
+    if (!laboratorio || !laboratorio.politicas) return;
+
+    try {
+      const p: any = laboratorio.politicas;
+
+      if (Array.isArray(p.horarios)) {
+        setHorarios(p.horarios);
+      }
+
+      const cap =
+        typeof p.capacidad_maxima === "number"
+          ? p.capacidad_maxima
+          : typeof p.capacidadMaxima === "number"
+          ? p.capacidadMaxima
+          : null;
+      if (cap != null) {
+        setCapacidadMaxima(cap);
+      }
+
+      if (Array.isArray(p.requisitos)) {
+        setRequisitos(p.requisitos);
+      }
+
+      const reglas =
+        typeof p.reglas_adicionales === "string"
+          ? p.reglas_adicionales
+          : typeof p.reglasAdicionales === "string"
+          ? p.reglasAdicionales
+          : null;
+      if (reglas != null) {
+        setReglasAdicionales(reglas);
+      }
+    } catch (err) {
+      console.error("Error leyendo políticas del laboratorio", err);
+    }
+  }, [laboratorio]);
+
   const handleToggleDia = (dia: DiaSemana) => {
     setHorarios((prev) =>
       prev.map((h) => (h.dia === dia ? { ...h, abierto: !h.abierto } : h))
@@ -147,16 +201,38 @@ export default function PoliciesEditor() {
     toast.success("Requisito eliminado");
   };
 
-  const handleGuardar = () => {
-    // Aquí irá la lógica para guardar en Supabase
-    console.log("Guardando políticas:", {
-      horarios,
-      capacidadMaxima,
-      requisitos,
-      reglasAdicionales,
-    });
-    toast.success("Políticas actualizadas correctamente");
-    setEditMode(false);
+  const handleGuardar = async () => {
+    if (!laboratorio) {
+      toast.error("No se encontró el laboratorio actual");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const payload = {
+        horarios,
+        capacidad_maxima: capacidadMaxima,
+        requisitos,
+        reglas_adicionales: reglasAdicionales,
+      };
+
+      const { error } = await supabase
+        .from("laboratorio")
+        .update({ politicas: payload })
+        .eq("id", laboratorio.id);
+
+      if (error) {
+        console.error("Error guardando políticas:", error);
+        toast.error("No se pudieron guardar las políticas");
+        return;
+      }
+
+      toast.success("Políticas actualizadas correctamente");
+      setEditMode(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getTipoIcon = (tipo: string) => {
@@ -185,6 +261,14 @@ export default function PoliciesEditor() {
     }
   };
 
+  if (!laboratorio) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Selecciona un laboratorio para configurar sus políticas.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header con botón de editar */}
@@ -198,12 +282,16 @@ export default function PoliciesEditor() {
         <div className="flex gap-2">
           {editMode ? (
             <>
-              <Button variant="outline" onClick={() => setEditMode(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditMode(false)}
+                disabled={isSaving}
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleGuardar}>
+              <Button onClick={handleGuardar} disabled={isSaving}>
                 <Save className="h-4 w-4 mr-2" />
-                Guardar Cambios
+                {isSaving ? "Guardando..." : "Guardar Cambios"}
               </Button>
             </>
           ) : (
@@ -252,25 +340,37 @@ export default function PoliciesEditor() {
               {horario.abierto ? (
                 <div className="flex items-center gap-3 flex-1">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground">De:</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      De:
+                    </Label>
                     <Input
                       type="time"
                       value={horario.horaInicio}
                       onChange={(e) =>
-                        handleChangeHorario(horario.dia, "horaInicio", e.target.value)
+                        handleChangeHorario(
+                          horario.dia,
+                          "horaInicio",
+                          e.target.value
+                        )
                       }
                       disabled={!editMode}
                       className="w-32"
                     />
                   </div>
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">-</span>
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground">Hasta:</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      Hasta:
+                    </Label>
                     <Input
                       type="time"
                       value={horario.horaFin}
                       onChange={(e) =>
-                        handleChangeHorario(horario.dia, "horaFin", e.target.value)
+                        handleChangeHorario(
+                          horario.dia,
+                          "horaFin",
+                          e.target.value
+                        )
                       }
                       disabled={!editMode}
                       className="w-32"
@@ -278,7 +378,9 @@ export default function PoliciesEditor() {
                   </div>
                 </div>
               ) : (
-                <span className="text-sm text-muted-foreground italic">Cerrado</span>
+                <span className="text-sm text-muted-foreground italic">
+                  Cerrado
+                </span>
               )}
             </div>
           ))}
@@ -293,7 +395,8 @@ export default function PoliciesEditor() {
             Capacidad del Laboratorio
           </CardTitle>
           <CardDescription>
-            Número máximo de personas que pueden usar el laboratorio simultáneamente
+            Número máximo de personas que pueden usar el laboratorio
+            simultáneamente
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -323,7 +426,8 @@ export default function PoliciesEditor() {
                 Requisitos de Acceso
               </CardTitle>
               <CardDescription>
-                Cursos, certificaciones o inducciones requeridas para usar el laboratorio
+                Cursos, certificaciones o inducciones requeridas para usar el
+                laboratorio
               </CardDescription>
             </div>
             {editMode && (
@@ -483,7 +587,10 @@ export default function PoliciesEditor() {
               <Input
                 value={nuevoRequisito.nombre}
                 onChange={(e) =>
-                  setNuevoRequisito((prev) => ({ ...prev, nombre: e.target.value }))
+                  setNuevoRequisito((prev) => ({
+                    ...prev,
+                    nombre: e.target.value,
+                  }))
                 }
                 placeholder="Ej: Física II, Certificación en seguridad..."
               />
@@ -524,7 +631,10 @@ export default function PoliciesEditor() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddRequisito(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddRequisito(false)}
+            >
               Cancelar
             </Button>
             <Button onClick={handleAgregarRequisito}>
