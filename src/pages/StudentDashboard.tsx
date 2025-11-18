@@ -18,6 +18,7 @@ import {
   Clock,
   MapPin,
   XCircle,
+  Download,
 } from "lucide-react";
 
 import {
@@ -387,6 +388,112 @@ export default function StudentDashboard() {
     cargarSolicitudes(); // Recargar la lista
   };
 
+    // Historial mock (usado en el tab de Historial y para exportar)
+  const historialMock = [
+    {
+      name: "Multímetro Digital",
+      status: "Completado",
+      date: "2024-03-10",
+      time: "14:00 - 16:00",
+      note: "Devuelto exitosamente",
+    },
+    {
+      name: "Protoboard",
+      status: "Completado",
+      date: "2024-03-08",
+      time: "10:00 - 12:00",
+      note: "Devuelto exitosamente",
+    },
+  ];
+
+  const handleExportHistoryToCSV = () => {
+    const header = ["Recurso", "Estado", "Fecha", "Horario", "Nota"];
+    const rows = historialMock.map((item) => [
+      item.name,
+      item.status,
+      item.date,
+      item.time,
+      item.note,
+    ]);
+
+    const csvContent =
+      [header, ...rows]
+        .map((row) =>
+          row
+            .map((cell) => {
+              const value = String(cell ?? "");
+              // escapamos comillas y coma
+              const escaped = value.replace(/"/g, '""');
+              return `"${escaped}"`;
+            })
+            .join(",")
+        )
+        .join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "historial_reservas.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportHistoryToPDF = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const rowsHtml = historialMock
+      .map(
+        (item) => `
+        <tr>
+          <td style="border:1px solid #ccc;padding:4px;">${item.name}</td>
+          <td style="border:1px solid #ccc;padding:4px;">${item.status}</td>
+          <td style="border:1px solid #ccc;padding:4px;">${item.date}</td>
+          <td style="border:1px solid #ccc;padding:4px;">${item.time}</td>
+          <td style="border:1px solid #ccc;padding:4px;">${item.note}</td>
+        </tr>
+      `
+      )
+      .join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Historial de reservas</title>
+        </head>
+        <body>
+          <h1>Historial de reservas</h1>
+          <table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:12px;">
+            <thead>
+              <tr>
+                <th style="border:1px solid #ccc;padding:4px;">Recurso</th>
+                <th style="border:1px solid #ccc;padding:4px;">Estado</th>
+                <th style="border:1px solid #ccc;padding:4px;">Fecha</th>
+                <th style="border:1px solid #ccc;padding:4px;">Horario</th>
+                <th style="border:1px solid #ccc;padding:4px;">Nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.print();
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+
+
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-lg border">
@@ -470,9 +577,9 @@ export default function StudentDashboard() {
                   )}
                 </div>
                 <div className="flex gap-2 ml-4">
-                  <Button variant="outline" size="sm">
+                  {/* <Button variant="outline" size="sm">
                     Ver Detalles
-                  </Button>
+                  </Button> */}
                   {solicitud.estado_solicitud === 'pendiente' && (
                     <Button
                       variant="destructive"
@@ -781,30 +888,36 @@ export default function StudentDashboard() {
         {/* TAB: Historial (mock) */}
         <TabsContent value="history">
           <Card>
-            <CardHeader>
-              <CardTitle>Historial Personal</CardTitle>
-              <CardDescription>
-                Historial de reservas pasadas y constancias académicas
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>Historial Personal</CardTitle>
+                <CardDescription>
+                  Historial de reservas pasadas y constancias académicas
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportHistoryToCSV}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportHistoryToPDF}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  PDF
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[
-                  {
-                    name: "Multímetro Digital",
-                    status: "Completado",
-                    date: "2024-03-10",
-                    time: "14:00 - 16:00",
-                    note: "Devuelto exitosamente",
-                  },
-                  {
-                    name: "Protoboard",
-                    status: "Completado",
-                    date: "2024-03-08",
-                    time: "10:00 - 12:00",
-                    note: "Devuelto exitosamente",
-                  },
-                ].map((item, index) => (
+                {historialMock.map((item, index) => (
+
                   <div key={index} className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium">{item.name}</h4>
