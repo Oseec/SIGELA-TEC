@@ -31,6 +31,7 @@ interface ReservationRequestModalProps {
   fechaSeleccionada: string;        // "YYYY-MM-DD"
   horaInicio?: string;              // "HH:MM"
   horaFin?: string;                 // "HH:MM"
+  onReservationSuccess?: () => void; // ⬅️ NUEVA PROP
 }
 
 export function ReservationRequestModal({
@@ -40,11 +41,13 @@ export function ReservationRequestModal({
   fechaSeleccionada,
   horaInicio,
   horaFin,
+  onReservationSuccess, // ⬅️ AGREGAR AQUÍ
 }: ReservationRequestModalProps) {
   const { user } = useAuth();
 
   const [cantidad, setCantidad] = useState<number>(1);
   const [motivo, setMotivo] = useState<string>("");
+  const [submitting, setSubmitting] = useState<boolean>(false); // ⬅️ NUEVO ESTADO
 
   // reset cuando cambia el recurso o se abre
   useEffect(() => {
@@ -84,6 +87,8 @@ export function ReservationRequestModal({
       return;
     }
 
+    setSubmitting(true); // ⬅️ DESHABILITAR BOTÓN
+
     try {
       const inicioIso = `${fechaSeleccionada}T${horaInicio}:00`;
       const finIso = `${fechaSeleccionada}T${horaFin}:00`;
@@ -102,11 +107,13 @@ export function ReservationRequestModal({
       if (error) {
         console.error(error);
         toast.error("Error al crear la solicitud");
+        setSubmitting(false); // ⬅️ REHABILITAR BOTÓN
         return;
       }
 
       if (!data || data.length === 0) {
         toast.error("No se pudo crear la solicitud");
+        setSubmitting(false); // ⬅️ REHABILITAR BOTÓN
         return;
       }
 
@@ -118,14 +125,31 @@ export function ReservationRequestModal({
 
       if (!result.solicitud_id) {
         toast.error(result.mensaje || "No se pudo crear la solicitud");
+        setSubmitting(false); // ⬅️ REHABILITAR BOTÓN
         return;
       }
 
+      // ⬇️⬇️⬇️ AQUÍ ES DONDE SE AGREGA LA LÓGICA ⬇️⬇️⬇️
       toast.success(result.mensaje || "Solicitud creada correctamente");
+      
+      // Cerrar el modal
       handleClose();
+      
+      // Llamar al callback para recargar las solicitudes en el dashboard
+      if (onReservationSuccess) {
+        onReservationSuccess();
+      }
+      
+      // Limpiar el formulario
+      setCantidad(1);
+      setMotivo("");
+      // ⬆️⬆️⬆️ FIN DE LA NUEVA LÓGICA ⬆️⬆️⬆️
+
     } catch (e) {
       console.error(e);
       toast.error("Ocurrió un error inesperado");
+    } finally {
+      setSubmitting(false); // ⬅️ SIEMPRE REHABILITAR BOTÓN
     }
   };
 
@@ -169,6 +193,7 @@ export function ReservationRequestModal({
                   type="date"
                   value={fechaSeleccionada}
                   readOnly
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-1">
@@ -177,6 +202,7 @@ export function ReservationRequestModal({
                   type="time"
                   value={horaInicio || ""}
                   readOnly
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-1">
@@ -185,6 +211,7 @@ export function ReservationRequestModal({
                   type="time"
                   value={horaFin || ""}
                   readOnly
+                  disabled={submitting}
                 />
               </div>
             </div>
@@ -199,6 +226,7 @@ export function ReservationRequestModal({
                 onChange={(e) =>
                   setCantidad(Number(e.target.value) || 1)
                 }
+                disabled={submitting}
               />
               <p className="text-xs text-muted-foreground">
                 Máximo: {recurso.cantidad_disponible}
@@ -211,15 +239,23 @@ export function ReservationRequestModal({
                 placeholder="Ejemplo: práctica de laboratorio, proyecto de curso, investigación..."
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
+                disabled={submitting}
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={handleClose}>
+              <Button 
+                variant="outline" 
+                onClick={handleClose}
+                disabled={submitting}
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit}>
-                Enviar solicitud
+              <Button 
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? "Enviando..." : "Enviar solicitud"}
               </Button>
             </div>
           </div>

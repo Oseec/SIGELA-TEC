@@ -17,6 +17,7 @@ import {
   Bell,
   Clock,
   MapPin,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -29,6 +30,7 @@ import {
 
 import CalendarAvailabilityView from "@/components/CalendarAvailabilityView";
 import { ReservationRequestModal, RecursoBusqueda } from "@/components/ReservationRequestModal";
+import CancelReservationDialog from "@/components/CancelReservationDialog";
 
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -40,6 +42,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { Solicitud } from "@/types/solicitudes";
 
 type RecursoDisponible = {
   recurso_id: number;
@@ -68,7 +71,7 @@ export default function StudentDashboard() {
     requisitos: string[];
     cumple: boolean;
     mensaje: string;
-    } | null>(null);
+  } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -87,77 +90,111 @@ export default function StudentDashboard() {
   const [aplicarFiltroRequisitos, setAplicarFiltroRequisitos] =
     useState<boolean>(false);
 
-  // reservas simuladas (por ahora)
-  const upcomingReservations = [
-    {
-      resource: "Osciloscopio Digital",
-      status: "Aprobada",
-      date: "2024-03-15",
-      time: "09:00 - 11:00",
-      requestedBy: "Dr. García",
-      location: "Lab. Física Avanzada",
-    },
-    {
-      resource: "Generador de Funciones",
-      status: "Pendiente",
-      date: "2024-03-18",
-      time: "13:00 - 15:00",
-      requestedBy: "Investigación",
-      location: "Lab. Física Avanzada",
-    },
-  ];
+  // solicitudes del usuario
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
+  const [loadingSolicitudes, setLoadingSolicitudes] = useState(false);
+  const [solicitudAEliminar, setSolicitudAEliminar] = useState<Solicitud | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const [recursoSeleccionado, setRecursoSeleccionado] = useState<RecursoBusqueda | null>(null);
   const [reservarAbierto, setReservarAbierto] = useState(false);
 
+  // Cargar solicitudes del usuario
+  const cargarSolicitudes = async () => {
+    if (!user) return;
+
+    setLoadingSolicitudes(true);
+    const { data, error } = await supabase.rpc("obtener_solicitudes_usuario", {
+      p_usuario_id: user.id,
+    });
+
+    if (error) {
+      console.error("Error cargando solicitudes:", error);
+      setSolicitudes([]);
+    } else {
+      setSolicitudes((data ?? []) as Solicitud[]);
+    }
+
+    setLoadingSolicitudes(false);
+  };
+
+  // Cargar solicitudes al montar y cuando cambie el usuario
+  useEffect(() => {
+    cargarSolicitudes();
+  }, [user]);
+
+  // Suscribirse a cambios en tiempo real
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('solicitudes-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'solicitud',
+          filter: `usuario_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Cambio detectado en solicitudes:', payload);
+          cargarSolicitudes();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const handleViewPolicies = async (recurso: any) => {
-  if (!user) return;
+    if (!user) return;
 
-  setSelectedResource(recurso);
-  setPoliciesOpen(true);
-  setPoliciesLoading(true);
+    setSelectedResource(recurso);
+    setPoliciesOpen(true);
+    setPoliciesLoading(true);
 
-  const { data, error } = await supabase.rpc(
-    "obtener_politicas_y_requisitos",
-    {
-      p_usuario_id: user.id,
-      p_laboratorio_id: recurso.laboratorio_id,
+    const { data, error } = await supabase.rpc(
+      "obtener_politicas_y_requisitos",
+      {
+        p_usuario_id: user.id,
+        p_laboratorio_id: recurso.laboratorio_id,
+      }
+    );
+
+    if (error) {
+      console.error("Error obteniendo políticas:", error);
+      setPoliciesData({
+        laboratorioNombre: recurso.laboratorio_nombre,
+        politicas: null,
+        requisitos: [],
+        cumple: true,
+        mensaje:
+          "No se pudieron cargar las políticas en este momento. Intenta de nuevo más tarde.",
+      });
+    } else if (data && data.length > 0) {
+      const row = data[0];
+      setPoliciesData({
+        laboratorioNombre: row.laboratorio_nombre,
+        politicas: row.politicas,
+        requisitos: row.requisitos_certificaciones ?? [],
+        cumple: row.cumple,
+        mensaje: row.mensaje,
+      });
+    } else {
+      setPoliciesData({
+        laboratorioNombre: recurso.laboratorio_nombre,
+        politicas: null,
+        requisitos: [],
+        cumple: true,
+        mensaje: "Este laboratorio no tiene requisitos registrados.",
+      });
     }
-  );
 
-  if (error) {
-    console.error("Error obteniendo políticas:", error);
-    setPoliciesData({
-      laboratorioNombre: recurso.laboratorio_nombre,
-      politicas: null,
-      requisitos: [],
-      cumple: true,
-      mensaje:
-        "No se pudieron cargar las políticas en este momento. Intenta de nuevo más tarde.",
-    });
-  } else if (data && data.length > 0) {
-    const row = data[0];
-    setPoliciesData({
-      laboratorioNombre: row.laboratorio_nombre,
-      politicas: row.politicas,
-      requisitos: row.requisitos_certificaciones ?? [],
-      cumple: row.cumple,
-      mensaje: row.mensaje,
-    });
-  } else {
-    setPoliciesData({
-      laboratorioNombre: recurso.laboratorio_nombre,
-      politicas: null,
-      requisitos: [],
-      cumple: true,
-      mensaje: "Este laboratorio no tiene requisitos registrados.",
-    });
-  }
-
-  setPoliciesLoading(false);
-};
-
+    setPoliciesLoading(false);
+  };
 
   // cargar recursos disponibles cuando cambian filtros
   useEffect(() => {
@@ -309,6 +346,47 @@ export default function StudentDashboard() {
 
   const isReservable = (estado: string) => estado === "disponible";
 
+  // Obtener próximas reservas (aprobadas y pendientes)
+  const proximasReservas = useMemo(() => {
+    const hoy = new Date().toISOString().split('T')[0];
+    return solicitudes
+      .filter(s =>
+        (s.estado_solicitud === 'aprobada' || s.estado_solicitud === 'pendiente') &&
+        s.fecha_inicio >= hoy
+      )
+      .slice(0, 5); // Mostrar solo las 5 más próximas
+  }, [solicitudes]);
+
+  const getEstadoSolicitudLabel = (estado: string) => {
+    switch (estado) {
+      case 'pendiente': return 'Pendiente';
+      case 'aprobada': return 'Aprobada';
+      case 'rechazada': return 'Rechazada';
+      case 'cancelada': return 'Cancelada';
+      case 'completada': return 'Completada';
+      default: return estado;
+    }
+  };
+
+  const getEstadoSolicitudVariant = (estado: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (estado) {
+      case 'aprobada': return 'default';
+      case 'pendiente': return 'secondary';
+      case 'rechazada':
+      case 'cancelada': return 'destructive';
+      default: return 'outline';
+    }
+  };
+
+  const handleCancelarClick = (solicitud: Solicitud) => {
+    setSolicitudAEliminar(solicitud);
+    setCancelDialogOpen(true);
+  };
+
+  const handleCancelSuccess = () => {
+    cargarSolicitudes(); // Recargar la lista
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-lg border">
@@ -318,12 +396,12 @@ export default function StudentDashboard() {
         <p className="text-muted-foreground">
           Tienes{" "}
           <span className="font-semibold text-primary">
-            2 reservas próximas
+            {proximasReservas.length} {proximasReservas.length === 1 ? 'reserva próxima' : 'reservas próximas'}
           </span>
         </p>
       </div>
 
-      {/* Próximas reservas (mock por ahora) */}
+      {/* Próximas reservas */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -335,47 +413,80 @@ export default function StudentDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {upcomingReservations.map((reservation, index) => (
-            <div
-              key={index}
-              className="flex items-start justify-between p-4 border rounded-lg"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold">{reservation.resource}</h3>
-                  <Badge
-                    variant={
-                      reservation.status === "Aprobada"
-                        ? "default"
-                        : "secondary"
-                    }
-                  >
-                    {reservation.status}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {reservation.date}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {reservation.time}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-sm">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>{reservation.location}</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Solicitado por: {reservation.requestedBy}
-                </p>
-              </div>
-              <Button variant="outline" size="sm">
-                Ver Detalles
-              </Button>
+          {loadingSolicitudes ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Cargando tus solicitudes...
             </div>
-          ))}
+          ) : proximasReservas.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No tienes reservas próximas
+            </div>
+          ) : (
+            proximasReservas.map((solicitud) => (
+              <div
+                key={solicitud.solicitud_id}
+                className="flex items-start justify-between p-4 border rounded-lg"
+              >
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{solicitud.recurso_nombre}</h3>
+                    <Badge variant={getEstadoSolicitudVariant(solicitud.estado_solicitud)}>
+                      {getEstadoSolicitudLabel(solicitud.estado_solicitud)}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-4 w-4" />
+                      {solicitud.fecha_inicio}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {solicitud.hora_inicio} - {solicitud.hora_fin}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>{solicitud.laboratorio_nombre}</span>
+                    {solicitud.laboratorio_ubicacion && (
+                      <span className="text-muted-foreground">
+                        • {solicitud.laboratorio_ubicacion}
+                      </span>
+                    )}
+                  </div>
+                  {solicitud.motivo && (
+                    <p className="text-sm text-muted-foreground">
+                      Motivo: {solicitud.motivo}
+                    </p>
+                  )}
+                  {solicitud.estado_solicitud === 'aprobada' && solicitud.aprobado_por_nombre && (
+                    <p className="text-sm text-green-600 dark:text-green-400">
+                      Aprobada por: {solicitud.aprobado_por_nombre}
+                    </p>
+                  )}
+                  {solicitud.estado_solicitud === 'rechazada' && solicitud.motivo_rechazo && (
+                    <p className="text-sm text-destructive">
+                      Motivo rechazo: {solicitud.motivo_rechazo}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button variant="outline" size="sm">
+                    Ver Detalles
+                  </Button>
+                  {solicitud.estado_solicitud === 'pendiente' && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleCancelarClick(solicitud)}
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -579,85 +690,84 @@ export default function StudentDashboard() {
                     </p>
                   )}
 
-                  {fechaFiltro &&
-                    !loadingRecursos &&
-                    recursosFiltrados.map((r) => (
-                      <div
-                        key={r.recurso_id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        {/* Lado izquierdo: info del recurso */}
-                        <div>
-                          <h4 className="font-medium">{r.recurso_nombre}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {r.laboratorio_nombre}
-                            {r.escuela_nombre && ` • ${r.escuela_nombre}`}
-                            {r.laboratorio_ubicacion &&
-                              ` • ${r.laboratorio_ubicacion}`}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Fecha seleccionada: {fechaFiltro}
-                            {horaInicioFiltro && horaFinFiltro && (
-                              <>
-                                {" "}
-                                • {horaInicioFiltro} - {horaFinFiltro}
-                              </>
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Cantidad disponible: {r.cantidad_disponible}
-                          </p>
-                          {aplicarFiltroRequisitos && r.mensaje_requisitos && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {r.mensaje_requisitos}
-                            </p>
+                {fechaFiltro &&
+                  !loadingRecursos &&
+                  recursosFiltrados.map((r) => (
+                    <div
+                      key={r.recurso_id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      {/* Lado izquierdo: info del recurso */}
+                      <div>
+                        <h4 className="font-medium">{r.recurso_nombre}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {r.laboratorio_nombre}
+                          {r.escuela_nombre && ` • ${r.escuela_nombre}`}
+                          {r.laboratorio_ubicacion &&
+                            ` • ${r.laboratorio_ubicacion}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Fecha seleccionada: {fechaFiltro}
+                          {horaInicioFiltro && horaFinFiltro && (
+                            <>
+                              {" "}
+                              • {horaInicioFiltro} - {horaFinFiltro}
+                            </>
                           )}
-                          <Badge
-                            variant={getEstadoVariant(r.recurso_estado)}
-                            className="mt-2"
-                          >
-                            {getEstadoLabel(r.recurso_estado)}
-                          </Badge>
-                        </div>
-
-                        {/* Lado derecho: ambos botones en el mismo div */}
-                        <div className="mt-4 flex flex-col items-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewPolicies(r)}
-                          >
-                            Ver requisitos
-                          </Button>
-
-                          <Button
-                            disabled={
-                              !isReservable(r.recurso_estado) ||
-                              r.cantidad_disponible <= 0
-                            }
-                            onClick={() => {
-                              // adaptar si tu objeto se llama distinto
-                              const recurso: RecursoBusqueda = {
-                                recurso_id: r.recurso_id,
-                                recurso_nombre: r.recurso_nombre,
-                                laboratorio_id: r.laboratorio_id,
-                                laboratorio_nombre: r.laboratorio_nombre,
-                                laboratorio_ubicacion: r.laboratorio_ubicacion,
-                                cantidad_disponible: r.cantidad_disponible,
-                              };
-
-                              setRecursoSeleccionado(recurso);
-                              setReservarAbierto(true);
-                            }}
-                          >
-                            {isReservable(r.recurso_estado) && r.cantidad_disponible > 0
-                              ? "Reservar"
-                              : "No Disponible"}
-                          </Button>
-
-                        </div>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cantidad disponible: {r.cantidad_disponible}
+                        </p>
+                        {aplicarFiltroRequisitos && r.mensaje_requisitos && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {r.mensaje_requisitos}
+                          </p>
+                        )}
+                        <Badge
+                          variant={getEstadoVariant(r.recurso_estado)}
+                          className="mt-2"
+                        >
+                          {getEstadoLabel(r.recurso_estado)}
+                        </Badge>
                       </div>
-                    ))}
+
+                      {/* Lado derecho: ambos botones en el mismo div */}
+                      <div className="mt-4 flex flex-col items-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewPolicies(r)}
+                        >
+                          Ver requisitos
+                        </Button>
+
+                        <Button
+                          disabled={
+                            !isReservable(r.recurso_estado) ||
+                            r.cantidad_disponible <= 0
+                          }
+                          onClick={() => {
+                            // adaptar si tu objeto se llama distinto
+                            const recurso: RecursoBusqueda = {
+                              recurso_id: r.recurso_id,
+                              recurso_nombre: r.recurso_nombre,
+                              laboratorio_id: r.laboratorio_id,
+                              laboratorio_nombre: r.laboratorio_nombre,
+                              laboratorio_ubicacion: r.laboratorio_ubicacion,
+                              cantidad_disponible: r.cantidad_disponible,
+                            };
+
+                            setRecursoSeleccionado(recurso);
+                            setReservarAbierto(true);
+                          }}
+                        >
+                          {isReservable(r.recurso_estado) && r.cantidad_disponible > 0
+                            ? "Reservar"
+                            : "No Disponible"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
               </div>
             </CardContent>
           </Card>
@@ -703,7 +813,7 @@ export default function StudentDashboard() {
                     <p className="text-sm text-muted-foreground">
                       {item.date} • {item.time}
                     </p>
-                    <p className="text-sm text-success mt-1">{item.note}</p>
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">{item.note}</p>
                   </div>
                 ))}
               </div>
@@ -747,7 +857,9 @@ export default function StudentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
-            <Dialog open={policiesOpen} onOpenChange={setPoliciesOpen}>
+
+      {/* Diálogo de políticas y requisitos */}
+      <Dialog open={policiesOpen} onOpenChange={setPoliciesOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
@@ -832,13 +944,24 @@ export default function StudentDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de reserva */}
       <ReservationRequestModal
         open={reservarAbierto}
         onOpenChange={setReservarAbierto}
         recurso={recursoSeleccionado}
-        fechaSeleccionada={fechaFiltro}      // tu estado de fecha
-        horaInicio={horaInicioFiltro}        // tu estado de hora inicio
-        horaFin={horaFinFiltro}              // tu estado de hora fin
+        fechaSeleccionada={fechaFiltro}
+        horaInicio={horaInicioFiltro}
+        horaFin={horaFinFiltro}
+        onReservationSuccess={cargarSolicitudes}
+      />
+
+      {/* Diálogo de cancelación */}
+      <CancelReservationDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        solicitud={solicitudAEliminar}
+        onCancelSuccess={handleCancelSuccess}
       />
     </div>
   );
